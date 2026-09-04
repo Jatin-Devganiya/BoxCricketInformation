@@ -86,8 +86,11 @@ public class MatchesController : ControllerBase
                 WinningTeamId = m.WinningTeamId,
                 WinningTeamName = m.WinningTeam != null ? m.WinningTeam.Name : null,
                 Result = m.Result,
+                ResultType = m.ResultType,
+                WinningMargin = m.WinningMargin,
                 MOMPlayerId = m.MOMPlayerId,
-                MOMPlayerName = m.MOMPlayer != null ? $"{m.MOMPlayer.FirstName} {m.MOMPlayer.LastName}" : null
+                MOMPlayerName = m.MOMPlayer != null ? $"{m.MOMPlayer.FirstName} {m.MOMPlayer.LastName}" : null,
+                MOMScore = m.MOMScore
             })
             .ToListAsync();
 

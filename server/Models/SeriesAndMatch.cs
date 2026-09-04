@@ -37,6 +37,8 @@ public class Match
     public Team? WinningTeam { get; set; }
 
     public string? Result { get; set; }
+    public string? ResultType { get; set; } // "runs", "wickets", "tie", "abandoned", "no_result", "pending"
+    public int? WinningMargin { get; set; }
     public int? MOMPlayerId { get; set; }
     public Player? MOMPlayer { get; set; }
     public double? MOMScore { get; set; }

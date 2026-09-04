@@ -178,6 +178,27 @@ public class LiveScoringService : ILiveScoringService
             : momDetails.SelectedPlayerName;
         matchDto.MOMScore = match.MOMScore ?? (momDetails.SelectedPlayerId.HasValue ? momDetails.TotalScore : null);
 
+        var calculatedResult = MatchResultCalculator.Calculate(match);
+        if (calculatedResult.IsComplete || string.IsNullOrWhiteSpace(matchDto.Result))
+        {
+            matchDto.Result = calculatedResult.ResultDescription;
+            matchDto.ResultType = calculatedResult.ResultType;
+            matchDto.WinningMargin = calculatedResult.WinningMargin;
+            matchDto.WinningTeamId = match.WinningTeamId ?? calculatedResult.WinningTeamId;
+            matchDto.WinningTeamName = matchDto.WinningTeamName ?? calculatedResult.WinningTeamName;
+        }
+
+        var calculatedResultDto = new MatchResultCalculationResultDto
+        {
+            ResultDescription = calculatedResult.ResultDescription,
+            ResultType = calculatedResult.ResultType,
+            WinningTeamId = calculatedResult.WinningTeamId,
+            WinningTeamName = calculatedResult.WinningTeamName,
+            WinningMargin = calculatedResult.WinningMargin,
+            IsComplete = calculatedResult.IsComplete,
+            Summary = calculatedResult.Summary
+        };
+
         return new LiveScoreDto
         {
             Match = matchDto,
@@ -187,7 +208,8 @@ public class LiveScoringService : ILiveScoringService
             IsInningsComplete = (activeInningsNumber == 1 ? inn1?.Status : inn2?.Status) == "Completed",
             IsMatchComplete = isMatchComplete,
             MatchSummary = summary,
-            MomDetails = momDetails
+            MomDetails = momDetails,
+            CalculatedResult = calculatedResultDto
         };
     }
 
@@ -951,12 +973,12 @@ public class LiveScoringService : ILiveScoringService
 
         if (inn.InningsNumber == 2)
         {
-            var inn1 = match.Innings.FirstOrDefault(i => i.InningsNumber == 1);
-            if (inn1 != null)
-            {
-                DetermineMatchWinnerAndResult(match, inn1, inn);
-            }
             match.Status = "Completed";
+            var calcResult = MatchResultCalculator.Calculate(match);
+            match.Result = calcResult.ResultDescription;
+            match.ResultType = calcResult.ResultType;
+            match.WinningMargin = calcResult.WinningMargin;
+            match.WinningTeamId = calcResult.WinningTeamId;
         }
 
         match.UpdatedAt = DateTime.UtcNow;
@@ -990,24 +1012,14 @@ public class LiveScoringService : ILiveScoringService
             await SyncPerformancesFromEventsAsync(inn.Id);
         }
 
-        if (req.WinningTeamId.HasValue && req.WinningTeamId > 0)
-        {
-            match.WinningTeamId = req.WinningTeamId;
-        }
+        match.Status = "Completed";
 
-        if (!string.IsNullOrWhiteSpace(req.Result))
-        {
-            match.Result = req.Result;
-        }
-        else if (string.IsNullOrWhiteSpace(match.Result))
-        {
-            var inn1 = match.Innings.FirstOrDefault(i => i.InningsNumber == 1);
-            var inn2 = match.Innings.FirstOrDefault(i => i.InningsNumber == 2);
-            if (inn1 != null && inn2 != null)
-            {
-                DetermineMatchWinnerAndResult(match, inn1, inn2);
-            }
-        }
+        // Authoritatively calculate the match result, winning team, margin, and description from actual innings data
+        var calcResult = MatchResultCalculator.Calculate(match);
+        match.Result = calcResult.ResultDescription;
+        match.ResultType = calcResult.ResultType;
+        match.WinningMargin = calcResult.WinningMargin;
+        match.WinningTeamId = calcResult.WinningTeamId;
 
         // Authoritative Automatic MOM calculation
         var allMatchPlayers = await _context.TeamPlayers
@@ -1057,15 +1069,23 @@ public class LiveScoringService : ILiveScoringService
                 if (inn.Runs > inn1.Runs)
                 {
                     inn.Status = "Completed";
-                    DetermineMatchWinnerAndResult(match, inn1, inn);
                     match.Status = "Completed";
+                    var calcResult = MatchResultCalculator.Calculate(match);
+                    match.Result = calcResult.ResultDescription;
+                    match.ResultType = calcResult.ResultType;
+                    match.WinningMargin = calcResult.WinningMargin;
+                    match.WinningTeamId = calcResult.WinningTeamId;
                     matchFinished = true;
                 }
                 else if (inn.Balls >= maxLegalBalls || inn.Wickets >= 10)
                 {
                     inn.Status = "Completed";
-                    DetermineMatchWinnerAndResult(match, inn1, inn);
                     match.Status = "Completed";
+                    var calcResult = MatchResultCalculator.Calculate(match);
+                    match.Result = calcResult.ResultDescription;
+                    match.ResultType = calcResult.ResultType;
+                    match.WinningMargin = calcResult.WinningMargin;
+                    match.WinningTeamId = calcResult.WinningTeamId;
                     matchFinished = true;
                 }
 

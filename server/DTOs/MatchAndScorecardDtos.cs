@@ -61,6 +61,8 @@ public class MatchDto
     public int? WinningTeamId { get; set; }
     public string? WinningTeamName { get; set; }
     public string? Result { get; set; }
+    public string? ResultType { get; set; }
+    public int? WinningMargin { get; set; }
     public int? MOMPlayerId { get; set; }
     public string? MOMPlayerName { get; set; }
     public double? MOMScore { get; set; }
@@ -258,6 +260,7 @@ public class LiveScoreDto
     public bool IsMatchComplete { get; set; }
     public string? MatchSummary { get; set; }
     public MomCalculationResultDto? MomDetails { get; set; }
+    public MatchResultCalculationResultDto? CalculatedResult { get; set; }
 }
 
 public class LiveInningsDto
@@ -448,4 +451,15 @@ public class PlayerMomScoreDto
     public string BattingSummary { get; set; } = string.Empty;
     public string BowlingSummary { get; set; } = string.Empty;
     public bool HasContribution { get; set; }
+}
+
+public class MatchResultCalculationResultDto
+{
+    public string ResultDescription { get; set; } = "Result pending";
+    public string ResultType { get; set; } = "pending";
+    public int? WinningTeamId { get; set; }
+    public string? WinningTeamName { get; set; }
+    public int? WinningMargin { get; set; }
+    public bool IsComplete { get; set; }
+    public string? Summary { get; set; }
 }

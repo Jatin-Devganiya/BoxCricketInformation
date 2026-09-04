@@ -39,6 +39,16 @@ BEGIN
     ALTER TABLE Matches ADD MOMScore FLOAT NULL;
 END
 
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Matches') AND name = 'ResultType')
+BEGIN
+    ALTER TABLE Matches ADD ResultType NVARCHAR(50) NULL;
+END
+
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Matches') AND name = 'WinningMargin')
+BEGIN
+    ALTER TABLE Matches ADD WinningMargin INT NULL;
+END
+
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'BallEvents')
 BEGIN
     CREATE TABLE BallEvents (

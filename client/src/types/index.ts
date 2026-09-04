@@ -134,6 +134,8 @@ export interface Match {
   momPlayerId?: number;
   momPlayerName?: string;
   momScore?: number | null;
+  resultType?: string;
+  winningMargin?: number;
 }
 
 export interface BattingRecord {
@@ -326,6 +328,17 @@ export interface LiveScore {
   isMatchComplete: boolean;
   matchSummary?: string;
   momDetails?: MomCalculationResult | null;
+  calculatedResult?: MatchResultCalculationResult | null;
+}
+
+export interface MatchResultCalculationResult {
+  resultDescription: string;
+  resultType: string;
+  winningTeamId?: number | null;
+  winningTeamName?: string | null;
+  winningMargin?: number | null;
+  isComplete: boolean;
+  summary: string;
 }
 
 export interface StartInningsPayload {

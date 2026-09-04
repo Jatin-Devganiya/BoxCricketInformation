@@ -27,7 +27,8 @@ import {
   Shield,
   Activity,
   BarChart2,
-  Trash2
+  Trash2,
+  Lock
 } from 'lucide-react';
 
 interface MatchesProps {
@@ -182,8 +183,10 @@ export const Matches: React.FC<MatchesProps> = ({
       setActiveInningsTab(live.activeInningsNumber as 1 | 2);
 
       // Outcome form fields
-      setOutcomeWinningTeamId(live.match.winningTeamId || 0);
-      setOutcomeResultText(live.match.result || '');
+      const autoWinner = live.calculatedResult?.winningTeamId ?? live.match.winningTeamId ?? 0;
+      const autoResult = live.calculatedResult?.resultDescription || live.match.result || '';
+      setOutcomeWinningTeamId(autoWinner);
+      setOutcomeResultText(autoResult);
       setOutcomeMomPlayerId(live.match.momPlayerId || 0);
 
       // Pre-populate setup if active innings is not started yet
@@ -572,13 +575,15 @@ export const Matches: React.FC<MatchesProps> = ({
     try {
       setActionLoading(true);
       setScorecardError(null);
+      const calculatedWinnerId = activeLiveScore.calculatedResult?.winningTeamId ?? (outcomeWinningTeamId > 0 ? outcomeWinningTeamId : undefined);
+      const calculatedResultText = activeLiveScore.calculatedResult?.resultDescription || outcomeResultText;
       const updated = await liveScoringApi.completeMatch(activeLiveScore.match.id, {
-        winningTeamId: outcomeWinningTeamId > 0 ? outcomeWinningTeamId : undefined,
-        result: outcomeResultText,
+        winningTeamId: calculatedWinnerId && calculatedWinnerId > 0 ? calculatedWinnerId : undefined,
+        result: calculatedResultText,
       });
       setActiveLiveScore(updated);
       fetchMatches();
-      alert('Match outcome and awards finalized successfully! Player of the Match has been automatically determined and saved.');
+      alert(`Match outcome finalized successfully!\nResult: ${updated.match.result || calculatedResultText}`);
     } catch (err: any) {
       setScorecardError(err.response?.data?.message || 'Failed to save match outcome.');
     } finally {
@@ -1815,12 +1820,31 @@ export const Matches: React.FC<MatchesProps> = ({
                   Match Outcome & Awards
                 </h4>
 
-                <div className="form-group" style={{ marginBottom: '1rem' }}>
-                  <label className="form-label">Winning Team</label>
+                <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                  <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontWeight: 700 }}>Winning Team</span>
+                    <span
+                      style={{
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                        color: 'var(--text-secondary)',
+                        background: 'rgba(255, 255, 255, 0.06)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        padding: '0.2rem 0.5rem',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.3rem'
+                      }}
+                    >
+                      <Lock size={12} /> Auto-Determined from Score
+                    </span>
+                  </label>
                   <select
                     className="form-select"
-                    value={outcomeWinningTeamId}
-                    onChange={(e) => setOutcomeWinningTeamId(Number(e.target.value))}
+                    value={activeLiveScore.calculatedResult?.winningTeamId ?? outcomeWinningTeamId}
+                    disabled={true}
+                    style={{ background: 'rgba(255,255,255,0.04)', color: '#fff', cursor: 'not-allowed', fontWeight: 600 }}
                   >
                     <option value={0}>-- Draw / Tied / In Progress --</option>
                     <option value={activeLiveScore.match.team1Id}>{activeLiveScore.match.team1Name}</option>
@@ -1828,16 +1852,91 @@ export const Matches: React.FC<MatchesProps> = ({
                   </select>
                 </div>
 
-                <div className="form-group" style={{ marginBottom: '1rem' }}>
-                  <label className="form-label">Match Result Description</label>
+                <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                  <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <span style={{ fontWeight: 700 }}>Match Result Description</span>
+                    <span
+                      style={{
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        color: '#38bdf8',
+                        background: 'rgba(56, 189, 248, 0.12)',
+                        border: '1px solid rgba(56, 189, 248, 0.3)',
+                        padding: '0.2rem 0.6rem',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.3rem'
+                      }}
+                    >
+                      <Lock size={12} /> Automatically generated from final innings
+                    </span>
+                  </label>
                   <input
                     type="text"
                     className="form-input"
-                    placeholder="e.g. Bhola na Bholu won by 14 runs"
-                    value={outcomeResultText}
-                    onChange={(e) => setOutcomeResultText(e.target.value)}
+                    readOnly={true}
+                    disabled={true}
+                    value={activeLiveScore.calculatedResult?.resultDescription || activeLiveScore.match.result || 'Result pending completion of innings'}
+                    style={{
+                      background: 'rgba(56, 189, 248, 0.06)',
+                      borderColor: 'rgba(56, 189, 248, 0.3)',
+                      color: '#38bdf8',
+                      fontWeight: 700,
+                      fontSize: '0.95rem',
+                      cursor: 'not-allowed',
+                    }}
                   />
                 </div>
+
+                {/* Calculated Innings Breakdown Card */}
+                {activeLiveScore.calculatedResult && (
+                  <div
+                    style={{
+                      background: 'rgba(15, 23, 42, 0.45)',
+                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                      borderRadius: '8px',
+                      padding: '1rem 1.25rem',
+                      marginBottom: '1.5rem',
+                      fontSize: '0.85rem'
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.6rem', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Calculated Innings Breakdown
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+                      {activeLiveScore.innings1 && (
+                        <div style={{ background: 'rgba(255,255,255,0.03)', padding: '0.6rem 0.8rem', borderRadius: '6px' }}>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>1st Innings (Batted First)</div>
+                          <div style={{ fontWeight: 700, color: '#fff' }}>{activeLiveScore.innings1.battingTeamName}</div>
+                          <div style={{ color: '#fbbf24', fontWeight: 800, marginTop: '0.2rem' }}>
+                            {activeLiveScore.innings1.runs}/{activeLiveScore.innings1.wickets}{' '}
+                            <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>
+                              ({activeLiveScore.innings1.oversDisplay} ov)
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                      {activeLiveScore.innings2 && (
+                        <div style={{ background: 'rgba(255,255,255,0.03)', padding: '0.6rem 0.8rem', borderRadius: '6px' }}>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>2nd Innings (Chasing Team)</div>
+                          <div style={{ fontWeight: 700, color: '#fff' }}>{activeLiveScore.innings2.battingTeamName}</div>
+                          <div style={{ color: '#fbbf24', fontWeight: 800, marginTop: '0.2rem' }}>
+                            {activeLiveScore.innings2.runs}/{activeLiveScore.innings2.wickets}{' '}
+                            <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>
+                              ({activeLiveScore.innings2.oversDisplay} ov)
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {activeLiveScore.calculatedResult.summary && (
+                      <div style={{ marginTop: '0.75rem', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
+                        📊 {activeLiveScore.calculatedResult.summary}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Auto Selected Player of the Match Card */}
                 <div style={{ marginBottom: '1.5rem' }}>
