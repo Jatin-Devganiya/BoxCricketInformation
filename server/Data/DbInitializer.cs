@@ -82,9 +82,20 @@ BEGIN
         CONSTRAINT FK_BallEvents_Players_FielderPlayerId FOREIGN KEY (FielderPlayerId) REFERENCES Players(Id)
     );
 
-    CREATE INDEX IX_BallEvents_MatchId_InningsId ON BallEvents(MatchId, InningsId);
     CREATE INDEX IX_BallEvents_FielderPlayerId ON BallEvents(FielderPlayerId);
     CREATE INDEX IX_BallEvents_CreatedAt ON BallEvents(CreatedAt);
+END
+
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'UserPermissionOverrides')
+BEGIN
+    CREATE TABLE UserPermissionOverrides (
+        Id INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        UserId INT NOT NULL,
+        Permission NVARCHAR(50) NOT NULL,
+        IsAllowed BIT NOT NULL,
+        CONSTRAINT FK_UserPermissionOverrides_Users_UserId FOREIGN KEY (UserId) REFERENCES Users(Id) ON DELETE CASCADE
+    );
+    CREATE UNIQUE INDEX IX_UserPermissionOverrides_UserId_Permission ON UserPermissionOverrides(UserId, Permission);
 END
 ";
         try
@@ -177,6 +188,31 @@ END
             await context.SaveChangesAsync();
 
             await context.UserRoles.AddAsync(new UserRole { UserId = umpireUser.Id, RoleId = umpireRoleObj.Id });
+            await context.SaveChangesAsync();
+        }
+
+        if (!await context.Users.AnyAsync(u => u.Username.ToLower() == "john"))
+        {
+            var johnUser = new User
+            {
+                Username = "john",
+                FirstName = "John",
+                LastName = "Official",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("John@123"),
+                Status = "Active",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            await context.Users.AddAsync(johnUser);
+            await context.SaveChangesAsync();
+
+            await context.UserRoles.AddAsync(new UserRole { UserId = johnUser.Id, RoleId = umpireRoleObj.Id });
+            await context.UserPermissionOverrides.AddAsync(new UserPermissionOverride
+            {
+                UserId = johnUser.Id,
+                Permission = "LiveScoring",
+                IsAllowed = false
+            });
             await context.SaveChangesAsync();
         }
 

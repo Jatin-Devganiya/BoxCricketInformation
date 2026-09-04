@@ -1,3 +1,4 @@
+using CricketApp.Api.Attributes;
 using CricketApp.Api.Data;
 using CricketApp.Api.DTOs;
 using CricketApp.Api.Models;
@@ -135,7 +136,7 @@ public class MatchesController : ControllerBase
         });
     }
 
-    [Authorize(Roles = "Admin,Umpire")]
+    [RequirePermission("Matches")]
     [HttpPost]
     public async Task<IActionResult> CreateMatch([FromBody] CreateMatchRequest req)
     {
@@ -192,7 +193,7 @@ public class MatchesController : ControllerBase
         });
     }
 
-    [Authorize(Roles = "Admin,Umpire")]
+    [RequirePermission("Matches")]
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateMatch(int id, [FromBody] UpdateMatchRequest req)
     {
@@ -223,7 +224,7 @@ public class MatchesController : ControllerBase
         return await GetMatchById(id);
     }
 
-    [Authorize(Roles = "Admin,Umpire")]
+    [RequirePermission("Matches")]
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteMatch(int id)
     {
@@ -252,7 +253,7 @@ public class MatchesController : ControllerBase
         return Ok(scorecard);
     }
 
-    [Authorize(Roles = "Admin,Umpire")]
+    [RequirePermission("LiveScoring")]
     [HttpPost("{id}/scorecard")]
     [HttpPut("{id}/scorecard")]
     public async Task<IActionResult> SaveScorecard(int id, [FromBody] SaveScorecardRequest req)
@@ -276,7 +277,7 @@ public class MatchesController : ControllerBase
         return Ok(liveScore);
     }
 
-    [Authorize(Roles = "Admin,Umpire")]
+    [RequirePermission("LiveScoring")]
     [HttpPost("{id}/innings/start")]
     public async Task<IActionResult> StartInnings(int id, [FromBody] StartInningsRequest req)
     {
@@ -292,7 +293,7 @@ public class MatchesController : ControllerBase
         }
     }
 
-    [Authorize(Roles = "Admin,Umpire")]
+    [RequirePermission("LiveScoring")]
     [HttpPost("{id}/innings/{inningsId}/ball")]
     public async Task<IActionResult> RecordBall(int id, int inningsId, [FromBody] RecordBallRequest req)
     {
@@ -308,7 +309,7 @@ public class MatchesController : ControllerBase
         }
     }
 
-    [Authorize(Roles = "Admin,Umpire")]
+    [RequirePermission("LiveScoring")]
     [HttpPost("{id}/innings/{inningsId}/wicket")]
     public async Task<IActionResult> RecordWicket(int id, int inningsId, [FromBody] RecordWicketRequest req)
     {
@@ -324,7 +325,7 @@ public class MatchesController : ControllerBase
         }
     }
 
-    [Authorize(Roles = "Admin,Umpire")]
+    [RequirePermission("LiveScoring")]
     [HttpPost("{id}/innings/{inningsId}/new-batsman")]
     public async Task<IActionResult> SelectNewBatsman(int id, int inningsId, [FromBody] SelectNewBatsmanRequest req)
     {
@@ -340,7 +341,7 @@ public class MatchesController : ControllerBase
         }
     }
 
-    [Authorize(Roles = "Admin,Umpire")]
+    [RequirePermission("LiveScoring")]
     [HttpPost("{id}/innings/{inningsId}/next-over")]
     public async Task<IActionResult> NextOver(int id, int inningsId, [FromBody] NextOverRequest req)
     {
@@ -356,7 +357,7 @@ public class MatchesController : ControllerBase
         }
     }
 
-    [Authorize(Roles = "Admin,Umpire")]
+    [RequirePermission("LiveScoring")]
     [HttpPost("{id}/innings/{inningsId}/complete")]
     public async Task<IActionResult> CompleteInnings(int id, int inningsId)
     {
@@ -365,7 +366,7 @@ public class MatchesController : ControllerBase
         return Ok(result);
     }
 
-    [Authorize(Roles = "Admin,Umpire")]
+    [RequirePermission("LiveScoring")]
     [HttpPost("{id}/complete")]
     public async Task<IActionResult> CompleteMatch(int id, [FromBody] CompleteMatchRequest req)
     {

@@ -5,6 +5,8 @@ export interface User {
   username: string;
   status: string;
   roles: string[];
+  overrides?: Record<string, string>;
+  effectivePermissions?: Record<string, boolean>;
   createdAt?: string;
 }
 

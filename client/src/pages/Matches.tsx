@@ -40,7 +40,7 @@ export const Matches: React.FC<MatchesProps> = ({
   initialScorecardMatchId,
   onClearInitialMatchId,
 }) => {
-  const { canManageCricket } = useAuth();
+  const { canManageMatches, canScoreLive } = useAuth();
   const [matches, setMatches] = useState<Match[]>([]);
   const [seriesList, setSeriesList] = useState<Series[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -645,7 +645,7 @@ export const Matches: React.FC<MatchesProps> = ({
             <option value="Cancelled">Cancelled</option>
           </select>
 
-          {canManageCricket && (
+          {canManageMatches && (
             <button className="btn btn-primary" onClick={handleOpenCreateMatch}>
               <Plus size={16} /> Schedule Match
             </button>
@@ -749,7 +749,7 @@ export const Matches: React.FC<MatchesProps> = ({
                   >
                     {m.status}
                   </span>
-                  {canManageCricket && m.status?.toLowerCase() === 'scheduled' && (
+                  {canManageMatches && m.status?.toLowerCase() === 'scheduled' && (
                     <button
                       className="btn-icon-delete"
                       onClick={(e) => {
@@ -842,7 +842,7 @@ export const Matches: React.FC<MatchesProps> = ({
                 >
                   <FileText size={15} /> Match Scorecard
                 </button>
-                {canManageCricket && (
+                {canManageMatches && (
                   <button
                     className="btn btn-sm btn-secondary"
                     onClick={() => handleOpenEditMatch(m)}
@@ -1091,7 +1091,7 @@ export const Matches: React.FC<MatchesProps> = ({
 
                 {/* State A: Innings Not Started -> Setup Wizard */}
                 {!isCurrentInningsStarted && !isCurrentInningsCompleted ? (
-                  !canManageCricket ? (
+                  !canScoreLive ? (
                     <div
                       style={{
                         background: 'rgba(255,255,255,0.02)',
@@ -1234,7 +1234,7 @@ export const Matches: React.FC<MatchesProps> = ({
                     </div>
 
                     {activeInningsTab === 1 && !activeLiveScore.innings2 ? (
-                      canManageCricket && (
+                      canScoreLive && (
                         <button
                           className="btn btn-primary"
                           onClick={() => {
@@ -1330,7 +1330,7 @@ export const Matches: React.FC<MatchesProps> = ({
                       </div>
 
                       {/* Manual Strike Swap Button */}
-                      {canManageCricket && (
+                      {canScoreLive && (
                         <button
                           className="strike-swap-btn"
                           title="Swap Striker & Non-Striker strike end"
@@ -1396,7 +1396,7 @@ export const Matches: React.FC<MatchesProps> = ({
                             6 legal deliveries completed in this over by <strong>{currentInnings?.previousBowlerName || currentInnings?.currentBowler?.playerName}</strong>. Striker and non-striker ends swapped.
                           </div>
                         </div>
-                        {canManageCricket ? (
+                        {canScoreLive ? (
                           <button
                             className="btn btn-primary"
                             onClick={() => {
@@ -1520,7 +1520,7 @@ export const Matches: React.FC<MatchesProps> = ({
                       </div>
                     )}
 
-                    {canManageCricket ? (
+                    {canScoreLive ? (
                       <>
                         {/* Primary Ball Scoring Controls */}
                         <div className="scoring-pad-wrapper">
@@ -2065,7 +2065,7 @@ export const Matches: React.FC<MatchesProps> = ({
                   </div>
                 </div>
 
-                {canManageCricket ? (
+                {canScoreLive ? (
                   <button
                     className="btn btn-primary"
                     onClick={handleSaveOutcome}
@@ -2075,7 +2075,7 @@ export const Matches: React.FC<MatchesProps> = ({
                   </button>
                 ) : (
                   <div style={{ textAlign: 'center', padding: '0.85rem', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                    Match outcome can only be finalized by an Umpire or Administrator.
+                    Match outcome can only be finalized with live scoring permission.
                   </div>
                 )}
               </div>

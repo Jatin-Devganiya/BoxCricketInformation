@@ -11,8 +11,14 @@ interface AuthContextType {
   isUser: boolean;
   canManageCricket: boolean;
   canManageUsers: boolean;
+  canManageMatches: boolean;
+  canScoreLive: boolean;
+  canManagePlayers: boolean;
+  canManageTeams: boolean;
+  canManageSeries: boolean;
   hasRole: (role: string) => boolean;
   hasAnyRole: (roles: string[]) => boolean;
+  hasPermission: (permission: string) => boolean;
   loading: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
@@ -68,11 +74,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return roles.some((role) => hasRole(role));
   };
 
+  const hasPermission = (permission: string): boolean => {
+    if (!user) return false;
+
+    // Check effective permissions from backend user profile
+    if (user.effectivePermissions) {
+      const key = Object.keys(user.effectivePermissions).find(
+        (k) => k.toLowerCase() === permission.toLowerCase()
+      );
+      if (key !== undefined) {
+        return !!user.effectivePermissions[key];
+      }
+    }
+
+    // Role-based defaults fallback
+    if (hasRole('Admin')) return true;
+    if (hasRole('Umpire')) {
+      if (permission.toLowerCase() === 'usermanagement') return false;
+      return true;
+    }
+    return false;
+  };
+
   const isAdmin = hasRole('Admin');
   const isUmpire = hasRole('Umpire');
   const isUser = hasRole('User') && !isAdmin && !isUmpire;
-  const canManageCricket = isAdmin || isUmpire;
-  const canManageUsers = isAdmin;
+
+  const canManageMatches = hasPermission('Matches');
+  const canScoreLive = hasPermission('LiveScoring');
+  const canManageUsers = hasPermission('UserManagement');
+  const canManagePlayers = hasPermission('Players');
+  const canManageTeams = hasPermission('Teams');
+  const canManageSeries = hasPermission('Series');
+  const canManageCricket = canManageMatches || canScoreLive || canManagePlayers || canManageTeams || canManageSeries;
 
   return (
     <AuthContext.Provider
@@ -85,8 +119,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isUser,
         canManageCricket,
         canManageUsers,
+        canManageMatches,
+        canScoreLive,
+        canManagePlayers,
+        canManageTeams,
+        canManageSeries,
         hasRole,
         hasAnyRole,
+        hasPermission,
         loading,
         login,
         logout,

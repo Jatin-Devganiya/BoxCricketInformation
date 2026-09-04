@@ -12,6 +12,7 @@ public class CricketDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
+    public DbSet<UserPermissionOverride> UserPermissionOverrides => Set<UserPermissionOverride>();
     public DbSet<Player> Players => Set<Player>();
     public DbSet<Team> Teams => Set<Team>();
     public DbSet<TeamPlayer> TeamPlayers => Set<TeamPlayer>();
@@ -58,6 +59,20 @@ public class CricketDbContext : DbContext
             entity.HasOne(ur => ur.Role)
                   .WithMany(r => r.UserRoles)
                   .HasForeignKey(ur => ur.RoleId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // UserPermissionOverride
+        modelBuilder.Entity<UserPermissionOverride>(entity =>
+        {
+            entity.HasKey(upo => upo.Id);
+            entity.HasIndex(upo => new { upo.UserId, upo.Permission }).IsUnique();
+            entity.Property(upo => upo.Permission).HasMaxLength(50).IsRequired();
+            entity.Property(upo => upo.IsAllowed).IsRequired();
+
+            entity.HasOne(upo => upo.User)
+                  .WithMany(u => u.PermissionOverrides)
+                  .HasForeignKey(upo => upo.UserId)
                   .OnDelete(DeleteBehavior.Cascade);
         });
 

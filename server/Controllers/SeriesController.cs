@@ -1,3 +1,4 @@
+using CricketApp.Api.Attributes;
 using CricketApp.Api.Data;
 using CricketApp.Api.DTOs;
 using CricketApp.Api.Models;
@@ -101,7 +102,7 @@ public class SeriesController : ControllerBase
         });
     }
 
-    [Authorize(Roles = "Admin,Umpire")]
+    [RequirePermission("Series")]
     [HttpPost]
     public async Task<IActionResult> CreateSeries([FromBody] CreateSeriesRequest req)
     {
@@ -137,7 +138,7 @@ public class SeriesController : ControllerBase
         });
     }
 
-    [Authorize(Roles = "Admin,Umpire")]
+    [RequirePermission("Series")]
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateSeries(int id, [FromBody] UpdateSeriesRequest req)
     {
@@ -166,7 +167,7 @@ public class SeriesController : ControllerBase
         });
     }
 
-    [Authorize(Roles = "Admin,Umpire")]
+    [RequirePermission("Series")]
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteSeries(int id)
     {

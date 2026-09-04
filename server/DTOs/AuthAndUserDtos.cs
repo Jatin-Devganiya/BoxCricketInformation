@@ -21,6 +21,7 @@ public class UserProfileResponse
     public string Username { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public List<string> Roles { get; set; } = new();
+    public Dictionary<string, bool> EffectivePermissions { get; set; } = new();
 }
 
 public class UserDto
@@ -31,6 +32,8 @@ public class UserDto
     public string Username { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public List<string> Roles { get; set; } = new();
+    public Dictionary<string, string> Overrides { get; set; } = new();
+    public Dictionary<string, bool> EffectivePermissions { get; set; } = new();
     public DateTime CreatedAt { get; set; }
 }
 
@@ -40,8 +43,9 @@ public class CreateUserRequest
     public string LastName { get; set; } = string.Empty;
     public string Username { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
-    public string Role { get; set; } = "User"; // Admin or User
+    public string Role { get; set; } = "User"; // Admin, Umpire, User
     public string Status { get; set; } = "Active";
+    public Dictionary<string, string>? PermissionOverrides { get; set; }
 }
 
 public class UpdateUserRequest
@@ -51,4 +55,5 @@ public class UpdateUserRequest
     public string? Password { get; set; } // Optional on update
     public string Role { get; set; } = "User";
     public string Status { get; set; } = "Active";
+    public Dictionary<string, string>? PermissionOverrides { get; set; }
 }

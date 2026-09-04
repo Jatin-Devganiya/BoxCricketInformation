@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 
 export const Players: React.FC = () => {
-  const { canManageCricket } = useAuth();
+  const { canManagePlayers } = useAuth();
   const [players, setPlayers] = useState<Player[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -197,7 +197,7 @@ export const Players: React.FC = () => {
             <option value="Inactive">Inactive</option>
           </select>
 
-          {canManageCricket && (
+          {canManagePlayers && (
             <button className="btn btn-primary" onClick={handleOpenCreate}>
               <Plus size={16} /> Add Player
             </button>
@@ -292,7 +292,7 @@ export const Players: React.FC = () => {
                         >
                           <BarChart2 size={14} /> Stats
                         </button>
-                        {canManageCricket && (
+                        {canManagePlayers && (
                           <>
                             <button
                               className="btn btn-sm btn-secondary"

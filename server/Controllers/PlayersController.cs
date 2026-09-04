@@ -1,3 +1,4 @@
+using CricketApp.Api.Attributes;
 using CricketApp.Api.Data;
 using CricketApp.Api.DTOs;
 using CricketApp.Api.Models;
@@ -100,7 +101,7 @@ public class PlayersController : ControllerBase
         return Ok(stats);
     }
 
-    [Authorize(Roles = "Admin,Umpire")]
+    [RequirePermission("Players")]
     [HttpPost]
     public async Task<IActionResult> CreatePlayer([FromBody] CreatePlayerRequest req)
     {
@@ -146,7 +147,7 @@ public class PlayersController : ControllerBase
         });
     }
 
-    [Authorize(Roles = "Admin,Umpire")]
+    [RequirePermission("Players")]
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdatePlayer(int id, [FromBody] UpdatePlayerRequest req)
     {
@@ -194,7 +195,7 @@ public class PlayersController : ControllerBase
         });
     }
 
-    [Authorize(Roles = "Admin,Umpire")]
+    [RequirePermission("Players")]
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeletePlayer(int id)
     {

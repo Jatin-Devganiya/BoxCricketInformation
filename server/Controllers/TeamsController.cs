@@ -1,3 +1,4 @@
+using CricketApp.Api.Attributes;
 using CricketApp.Api.Data;
 using CricketApp.Api.DTOs;
 using CricketApp.Api.Models;
@@ -66,7 +67,7 @@ public class TeamsController : ControllerBase
         });
     }
 
-    [Authorize(Roles = "Admin,Umpire")]
+    [RequirePermission("Teams")]
     [HttpPost]
     public async Task<IActionResult> CreateTeam([FromBody] CreateTeamRequest req)
     {
@@ -97,7 +98,7 @@ public class TeamsController : ControllerBase
         });
     }
 
-    [Authorize(Roles = "Admin,Umpire")]
+    [RequirePermission("Teams")]
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateTeam(int id, [FromBody] UpdateTeamRequest req)
     {
@@ -121,7 +122,7 @@ public class TeamsController : ControllerBase
         });
     }
 
-    [Authorize(Roles = "Admin,Umpire")]
+    [RequirePermission("Teams")]
     [HttpPost("{id}/players")]
     public async Task<IActionResult> AddPlayerToTeam(int id, [FromBody] AssignPlayerToTeamRequest req)
     {
@@ -152,7 +153,7 @@ public class TeamsController : ControllerBase
         return Ok(new { message = $"Player {player.FirstName} {player.LastName} added to {team.Name}." });
     }
 
-    [Authorize(Roles = "Admin,Umpire")]
+    [RequirePermission("Teams")]
     [HttpDelete("{id}/players/{playerId}")]
     public async Task<IActionResult> RemovePlayerFromTeam(int id, int playerId)
     {
@@ -166,7 +167,7 @@ public class TeamsController : ControllerBase
         return Ok(new { message = "Player removed from team." });
     }
 
-    [Authorize(Roles = "Admin,Umpire")]
+    [RequirePermission("Teams")]
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteTeam(int id)
     {

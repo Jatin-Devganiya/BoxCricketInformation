@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 
 export const Teams: React.FC = () => {
-  const { canManageCricket } = useAuth();
+  const { canManageTeams } = useAuth();
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -148,7 +148,7 @@ export const Teams: React.FC = () => {
           <h2 style={{ fontSize: '1.1rem', fontWeight: 600 }}>Registered Teams</h2>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Manage box cricket teams and team rosters</p>
         </div>
-        {canManageCricket && (
+        {canManageTeams && (
           <button className="btn btn-primary" onClick={handleOpenCreate}>
             <Plus size={16} /> Add Team
           </button>
@@ -211,7 +211,7 @@ export const Teams: React.FC = () => {
                         >
                           <Users size={14} /> Roster
                         </button>
-                        {canManageCricket && (
+                        {canManageTeams && (
                           <>
                             <button
                               className="btn btn-sm btn-secondary"
@@ -252,7 +252,7 @@ export const Teams: React.FC = () => {
           <div>Team not found.</div>
         ) : (
           <div>
-            {canManageCricket && (
+            {canManageTeams && (
               <div
                 style={{
                   display: 'flex',
@@ -297,13 +297,13 @@ export const Teams: React.FC = () => {
                     <th>Player</th>
                     <th>Role</th>
                     <th>Status</th>
-                    {canManageCricket && <th style={{ textAlign: 'right' }}>Action</th>}
+                    {canManageTeams && <th style={{ textAlign: 'right' }}>Action</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {selectedTeamDetail.players.length === 0 ? (
                     <tr>
-                      <td colSpan={canManageCricket ? 4 : 3} style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)' }}>
+                      <td colSpan={canManageTeams ? 4 : 3} style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)' }}>
                         No players currently assigned to this team squad.
                       </td>
                     </tr>
@@ -327,7 +327,7 @@ export const Teams: React.FC = () => {
                         <td>
                           <span className="badge badge-success">{player.status}</span>
                         </td>
-                        {canManageCricket && (
+                        {canManageTeams && (
                           <td style={{ textAlign: 'right' }}>
                             <button
                               className="btn btn-sm btn-danger"

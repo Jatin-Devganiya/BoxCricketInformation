@@ -17,7 +17,7 @@ interface SeriesProps {
 }
 
 export const Series: React.FC<SeriesProps> = ({ onViewScorecard }) => {
-  const { canManageCricket } = useAuth();
+  const { canManageSeries } = useAuth();
   const [seriesList, setSeriesList] = useState<SeriesType[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -138,7 +138,7 @@ export const Series: React.FC<SeriesProps> = ({ onViewScorecard }) => {
             Organize single-day box cricket tournaments or multi-day leagues
           </p>
         </div>
-        {canManageCricket && (
+        {canManageSeries && (
           <button className="btn btn-primary" onClick={handleOpenCreate}>
             <Plus size={16} /> Create Series
           </button>
@@ -221,7 +221,7 @@ export const Series: React.FC<SeriesProps> = ({ onViewScorecard }) => {
                           >
                             <Trophy size={14} /> Matches
                           </button>
-                          {canManageCricket && (
+                          {canManageSeries && (
                             <>
                               <button
                                 className="btn btn-sm btn-secondary"

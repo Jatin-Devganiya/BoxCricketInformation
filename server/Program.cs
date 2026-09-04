@@ -18,6 +18,7 @@ builder.Services.AddDbContext<CricketDbContext>(options =>
 
 // 2. Add Custom Services
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddScoped<IPlayerStatsService, PlayerStatsService>();
 builder.Services.AddScoped<IScorecardService, ScorecardService>();
 builder.Services.AddScoped<ILiveScoringService, LiveScoringService>();

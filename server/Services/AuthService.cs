@@ -19,11 +19,13 @@ public class AuthService : IAuthService
 {
     private readonly CricketDbContext _context;
     private readonly IConfiguration _configuration;
+    private readonly IPermissionService _permissionService;
 
-    public AuthService(CricketDbContext context, IConfiguration configuration)
+    public AuthService(CricketDbContext context, IConfiguration configuration, IPermissionService permissionService)
     {
         _context = context;
         _configuration = configuration;
+        _permissionService = permissionService;
     }
 
     public async Task<LoginResponse?> AuthenticateAsync(LoginRequest request)
@@ -45,6 +47,8 @@ public class AuthService : IAuthService
         }
 
         var roles = user.UserRoles.Select(ur => ur.Role.Name).ToList();
+        var effectivePermissions = await _permissionService.GetEffectivePermissionsAsync(user.Id);
+
         var tokenHandler = new JwtSecurityTokenHandler();
         var jwtKey = _configuration["Jwt:Key"] ?? "BoxCricketStatisticsManagementSecureKey_2026_SecretKey!";
         var key = Encoding.UTF8.GetBytes(jwtKey);
@@ -62,6 +66,11 @@ public class AuthService : IAuthService
         foreach (var role in roles)
         {
             claims.Add(new Claim(ClaimTypes.Role, role));
+        }
+
+        foreach (var perm in effectivePermissions.Where(kvp => kvp.Value).Select(kvp => kvp.Key))
+        {
+            claims.Add(new Claim("Permission", perm));
         }
 
         var tokenDescriptor = new SecurityTokenDescriptor
@@ -87,7 +96,8 @@ public class AuthService : IAuthService
                 LastName = user.LastName,
                 Username = user.Username,
                 Status = user.Status,
-                Roles = roles
+                Roles = roles,
+                EffectivePermissions = effectivePermissions
             }
         };
     }
@@ -101,6 +111,8 @@ public class AuthService : IAuthService
 
         if (user == null) return null;
 
+        var effectivePermissions = await _permissionService.GetEffectivePermissionsAsync(user.Id);
+
         return new UserProfileResponse
         {
             Id = user.Id,
@@ -108,7 +120,8 @@ public class AuthService : IAuthService
             LastName = user.LastName,
             Username = user.Username,
             Status = user.Status,
-            Roles = user.UserRoles.Select(ur => ur.Role.Name).ToList()
+            Roles = user.UserRoles.Select(ur => ur.Role.Name).ToList(),
+            EffectivePermissions = effectivePermissions
         };
     }
 }

@@ -1,7 +1,8 @@
+using CricketApp.Api.Attributes;
 using CricketApp.Api.Data;
 using CricketApp.Api.DTOs;
 using CricketApp.Api.Models;
-using Microsoft.AspNetCore.Authorization;
+using CricketApp.Api.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,14 +10,16 @@ namespace CricketApp.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "Admin")]
+[RequirePermission("UserManagement")]
 public class UsersController : ControllerBase
 {
     private readonly CricketDbContext _context;
+    private readonly IPermissionService _permissionService;
 
-    public UsersController(CricketDbContext context)
+    public UsersController(CricketDbContext context, IPermissionService permissionService)
     {
         _context = context;
+        _permissionService = permissionService;
     }
 
     [HttpGet]
@@ -25,8 +28,24 @@ public class UsersController : ControllerBase
         var users = await _context.Users
             .Include(u => u.UserRoles)
                 .ThenInclude(ur => ur.Role)
+            .Include(u => u.PermissionOverrides)
             .OrderBy(u => u.Username)
-            .Select(u => new UserDto
+            .ToListAsync();
+
+        var result = new List<UserDto>();
+        foreach (var u in users)
+        {
+            var primaryRole = u.UserRoles.FirstOrDefault()?.Role.Name ?? "User";
+            var effective = _permissionService.GetRoleDefaults(primaryRole);
+            var overridesDict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var ov in u.PermissionOverrides)
+            {
+                effective[ov.Permission] = ov.IsAllowed;
+                overridesDict[ov.Permission] = ov.IsAllowed ? "Allow" : "Deny";
+            }
+
+            result.Add(new UserDto
             {
                 Id = u.Id,
                 FirstName = u.FirstName,
@@ -34,11 +53,13 @@ public class UsersController : ControllerBase
                 Username = u.Username,
                 Status = u.Status,
                 Roles = u.UserRoles.Select(ur => ur.Role.Name).ToList(),
+                Overrides = overridesDict,
+                EffectivePermissions = effective,
                 CreatedAt = u.CreatedAt
-            })
-            .ToListAsync();
+            });
+        }
 
-        return Ok(users);
+        return Ok(result);
     }
 
     [HttpGet("{id}")]
@@ -47,9 +68,20 @@ public class UsersController : ControllerBase
         var user = await _context.Users
             .Include(u => u.UserRoles)
                 .ThenInclude(ur => ur.Role)
+            .Include(u => u.PermissionOverrides)
             .FirstOrDefaultAsync(u => u.Id == id);
 
         if (user == null) return NotFound(new { message = "User not found." });
+
+        var primaryRole = user.UserRoles.FirstOrDefault()?.Role.Name ?? "User";
+        var effective = _permissionService.GetRoleDefaults(primaryRole);
+        var overridesDict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var ov in user.PermissionOverrides)
+        {
+            effective[ov.Permission] = ov.IsAllowed;
+            overridesDict[ov.Permission] = ov.IsAllowed ? "Allow" : "Deny";
+        }
 
         return Ok(new UserDto
         {
@@ -59,6 +91,8 @@ public class UsersController : ControllerBase
             Username = user.Username,
             Status = user.Status,
             Roles = user.UserRoles.Select(ur => ur.Role.Name).ToList(),
+            Overrides = overridesDict,
+            EffectivePermissions = effective,
             CreatedAt = user.CreatedAt
         });
     }
@@ -100,6 +134,14 @@ public class UsersController : ControllerBase
         await _context.UserRoles.AddAsync(new UserRole { UserId = user.Id, RoleId = role.Id });
         await _context.SaveChangesAsync();
 
+        if (req.PermissionOverrides != null && req.PermissionOverrides.Count > 0)
+        {
+            await _permissionService.SetUserOverridesAsync(user.Id, req.PermissionOverrides);
+        }
+
+        var effective = await _permissionService.GetEffectivePermissionsAsync(user.Id);
+        var overrides = await _permissionService.GetUserOverridesAsync(user.Id);
+
         return CreatedAtAction(nameof(GetUserById), new { id = user.Id }, new UserDto
         {
             Id = user.Id,
@@ -108,6 +150,8 @@ public class UsersController : ControllerBase
             Username = user.Username,
             Status = user.Status,
             Roles = new List<string> { role.Name },
+            Overrides = overrides,
+            EffectivePermissions = effective,
             CreatedAt = user.CreatedAt
         });
     }
@@ -140,6 +184,14 @@ public class UsersController : ControllerBase
 
         await _context.SaveChangesAsync();
 
+        if (req.PermissionOverrides != null)
+        {
+            await _permissionService.SetUserOverridesAsync(user.Id, req.PermissionOverrides);
+        }
+
+        var effective = await _permissionService.GetEffectivePermissionsAsync(user.Id);
+        var overrides = await _permissionService.GetUserOverridesAsync(user.Id);
+
         return Ok(new UserDto
         {
             Id = user.Id,
@@ -148,6 +200,8 @@ public class UsersController : ControllerBase
             Username = user.Username,
             Status = user.Status,
             Roles = role != null ? new List<string> { role.Name } : new List<string>(),
+            Overrides = overrides,
+            EffectivePermissions = effective,
             CreatedAt = user.CreatedAt
         });
     }
