@@ -25,7 +25,8 @@ import {
   Award,
   ChevronRight,
   Shield,
-  Activity
+  Activity,
+  BarChart2
 } from 'lucide-react';
 
 interface MatchesProps {
@@ -109,6 +110,7 @@ export const Matches: React.FC<MatchesProps> = ({
   const [outcomeWinningTeamId, setOutcomeWinningTeamId] = useState<number>(0);
   const [outcomeResultText, setOutcomeResultText] = useState<string>('');
   const [outcomeMomPlayerId, setOutcomeMomPlayerId] = useState<number>(0);
+  const [momDetailsModalOpen, setMomDetailsModalOpen] = useState<boolean>(false);
 
   const fetchMatches = async () => {
     try {
@@ -572,11 +574,10 @@ export const Matches: React.FC<MatchesProps> = ({
       const updated = await liveScoringApi.completeMatch(activeLiveScore.match.id, {
         winningTeamId: outcomeWinningTeamId > 0 ? outcomeWinningTeamId : undefined,
         result: outcomeResultText,
-        momPlayerId: outcomeMomPlayerId > 0 ? outcomeMomPlayerId : undefined,
       });
       setActiveLiveScore(updated);
       fetchMatches();
-      alert('Match outcome and awards saved successfully!');
+      alert('Match outcome and awards finalized successfully! Player of the Match has been automatically determined and saved.');
     } catch (err: any) {
       setScorecardError(err.response?.data?.message || 'Failed to save match outcome.');
     } finally {
@@ -1787,20 +1788,74 @@ export const Matches: React.FC<MatchesProps> = ({
                   />
                 </div>
 
-                <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-                  <label className="form-label">Player of the Match (MOM)</label>
-                  <select
-                    className="form-select"
-                    value={outcomeMomPlayerId}
-                    onChange={(e) => setOutcomeMomPlayerId(Number(e.target.value))}
+                {/* Auto Selected Player of the Match Card */}
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 700 }}>
+                      <Award size={16} style={{ color: '#fbbf24' }} /> Player of the Match (Auto Selected)
+                    </span>
+                    <span
+                      className={`badge ${activeLiveScore.match.status === 'Completed' ? 'badge-success' : 'badge-warning'}`}
+                      style={{ fontSize: '0.7rem' }}
+                    >
+                      {activeLiveScore.match.status === 'Completed' ? 'Finalized Award' : 'Live Projected Leader'}
+                    </span>
+                  </label>
+
+                  <div
+                    style={{
+                      background: 'rgba(245, 158, 11, 0.08)',
+                      border: '1px solid rgba(245, 158, 11, 0.25)',
+                      borderRadius: '8px',
+                      padding: '1.25rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.75rem',
+                    }}
                   >
-                    <option value={0}>-- Select Player --</option>
-                    {[...team1Players, ...team2Players].map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.fullName} ({p.currentTeamName || 'Player'})
-                      </option>
-                    ))}
-                  </select>
+                    {activeLiveScore.momDetails?.selectedPlayerName || activeLiveScore.match.momPlayerName ? (
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
+                          <div>
+                            <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#fff', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                              🏆 {activeLiveScore.momDetails?.selectedPlayerName || activeLiveScore.match.momPlayerName}
+                            </div>
+                            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                              {activeLiveScore.momDetails?.selectedPlayerTeamName || activeLiveScore.match.winningTeamName || 'Match Participant'}
+                            </div>
+                          </div>
+
+                          <div style={{ padding: '0.4rem 0.85rem', background: 'rgba(245, 158, 11, 0.15)', borderRadius: '20px', border: '1px solid rgba(245, 158, 11, 0.3)', color: '#fbbf24', fontWeight: 800, fontSize: '0.9rem' }}>
+                            Performance Score: {activeLiveScore.momDetails?.totalScore ?? activeLiveScore.match.momScore ?? 0} pts
+                          </div>
+                        </div>
+
+                        <div style={{ marginTop: '0.85rem', padding: '0.65rem 0.85rem', background: 'rgba(0,0,0,0.25)', borderRadius: '6px', fontSize: '0.85rem' }}>
+                          <div style={{ color: 'var(--text-secondary)', marginBottom: '0.3rem' }}>
+                            🏏 <strong>Batting:</strong> {activeLiveScore.momDetails?.battingSummary || 'Evaluated'}
+                          </div>
+                          <div style={{ color: 'var(--text-secondary)' }}>
+                            🎯 <strong>Bowling:</strong> {activeLiveScore.momDetails?.bowlingSummary || 'Evaluated'}
+                          </div>
+                        </div>
+
+                        <div style={{ marginTop: '0.85rem', display: 'flex', justifyContent: 'flex-end' }}>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-secondary"
+                            onClick={() => setMomDetailsModalOpen(true)}
+                            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                          >
+                            <BarChart2 size={14} /> View MOM Calculation & Leaderboard
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', padding: '0.75rem' }}>
+                        No player performances recorded yet to calculate Man of the Match. Performances will be automatically evaluated as deliveries are scored.
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <button
@@ -2001,6 +2056,104 @@ export const Matches: React.FC<MatchesProps> = ({
                   </option>
                 ))}
             </select>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Man of the Match Calculation & Leaderboard Modal */}
+      <Modal
+        isOpen={momDetailsModalOpen}
+        onClose={() => setMomDetailsModalOpen(false)}
+        title="Player of the Match (MOM) - Performance Breakdown"
+        size="lg"
+      >
+        <div>
+          <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1rem', lineHeight: '1.4' }}>
+            MOM points are computed authoritatively from recorded match performances. Factors include:
+            runs scored, strike rate, boundaries (4s/6s), wickets taken, bowling economy rate, maidens, all-rounder bonus (both runs & wickets), and winning team impact.
+          </div>
+
+          <div className="table-container">
+            <table className="custom-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '45px' }}>#</th>
+                  <th>Player</th>
+                  <th>Team</th>
+                  <th>Batting Pts</th>
+                  <th>Bowling Pts</th>
+                  <th>All-Rounder</th>
+                  <th>Win Bonus</th>
+                  <th style={{ textAlign: 'right' }}>Total Points</th>
+                </tr>
+              </thead>
+              <tbody>
+                {!activeLiveScore?.momDetails?.leaderboard || activeLiveScore.momDetails.leaderboard.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)' }}>
+                      No player statistics available yet for this match.
+                    </td>
+                  </tr>
+                ) : (
+                  activeLiveScore.momDetails.leaderboard.map((item) => {
+                    const isWinner = item.rank === 1 && item.totalScore > 0;
+                    return (
+                      <tr
+                        key={item.playerId}
+                        style={{
+                          background: isWinner ? 'rgba(245, 158, 11, 0.12)' : undefined,
+                        }}
+                      >
+                        <td>
+                          {isWinner ? (
+                            <span title="Winner" style={{ fontSize: '1.1rem' }}>🏆</span>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>{item.rank}</span>
+                          )}
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <span style={{ color: isWinner ? '#fbbf24' : 'var(--text-primary)', fontWeight: 700 }}>
+                              {item.playerName}
+                            </span>
+                            {isWinner && (
+                              <span className="badge badge-warning" style={{ fontSize: '0.65rem', padding: '0.15rem 0.4rem' }}>
+                                MOM
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                            {item.battingSummary} • {item.bowlingSummary}
+                          </div>
+                        </td>
+                        <td>
+                          <span style={{ fontSize: '0.85rem' }}>{item.teamName}</span>
+                        </td>
+                        <td style={{ fontWeight: 600 }}>{item.battingPoints}</td>
+                        <td style={{ fontWeight: 600 }}>{item.bowlingPoints}</td>
+                        <td>
+                          {item.allRounderBonus > 0 ? (
+                            <span style={{ color: '#10b981', fontWeight: 700 }}>+{item.allRounderBonus}</span>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)' }}>-</span>
+                          )}
+                        </td>
+                        <td>
+                          {item.winningTeamBonus > 0 ? (
+                            <span style={{ color: '#3b82f6', fontWeight: 700 }}>+{item.winningTeamBonus}</span>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)' }}>-</span>
+                          )}
+                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: 800, fontSize: '1rem', color: isWinner ? '#fbbf24' : 'var(--accent-cricket)' }}>
+                          {item.totalScore}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </Modal>

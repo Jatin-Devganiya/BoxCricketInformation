@@ -23,6 +23,7 @@ export interface Player {
   status: string;
   userId?: number;
   currentTeamName?: string;
+  manOfTheMatchCount?: number;
   createdAt: string;
 }
 
@@ -73,6 +74,8 @@ export interface PlayerStatistics {
   playerId: number;
   playerName: string;
   playerCategory: string;
+  manOfTheMatchCount: number;
+  momCount?: number;
   batting: BattingStats;
   bowling: BowlingStats;
   fielding: FieldingStats;
@@ -130,6 +133,7 @@ export interface Match {
   result?: string;
   momPlayerId?: number;
   momPlayerName?: string;
+  momScore?: number | null;
 }
 
 export interface BattingRecord {
@@ -321,6 +325,7 @@ export interface LiveScore {
   isInningsComplete: boolean;
   isMatchComplete: boolean;
   matchSummary?: string;
+  momDetails?: MomCalculationResult | null;
 }
 
 export interface StartInningsPayload {
@@ -349,4 +354,46 @@ export interface RecordWicketPayload {
   wicketType: string;
   fielderPlayerId?: number;
   runsScored?: number;
+}
+
+export interface PlayerMomScore {
+  rank: number;
+  playerId: number;
+  playerName: string;
+  teamId: number;
+  teamName: string;
+  totalScore: number;
+  battingPoints: number;
+  bowlingPoints: number;
+  allRounderBonus: number;
+  winningTeamBonus: number;
+  runs: number;
+  ballsFaced: number;
+  fours: number;
+  sixes: number;
+  isOut: boolean;
+  strikeRate: number;
+  wickets: number;
+  ballsBowled: number;
+  oversDisplay: string;
+  runsConceded: number;
+  economyRate: number;
+  maidens: number;
+  battingSummary: string;
+  bowlingSummary: string;
+  hasContribution: boolean;
+}
+
+export interface MomCalculationResult {
+  selectedPlayerId?: number | null;
+  selectedPlayerName?: string | null;
+  selectedPlayerTeamName?: string | null;
+  totalScore: number;
+  battingPoints: number;
+  bowlingPoints: number;
+  allRounderBonus: number;
+  winningTeamBonus: number;
+  battingSummary: string;
+  bowlingSummary: string;
+  leaderboard: PlayerMomScore[];
 }

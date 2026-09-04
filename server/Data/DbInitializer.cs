@@ -34,6 +34,11 @@ BEGIN
     ALTER TABLE MatchInnings ADD Extras INT NOT NULL CONSTRAINT DF_MatchInnings_Extras DEFAULT 0;
 END
 
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Matches') AND name = 'MOMScore')
+BEGIN
+    ALTER TABLE Matches ADD MOMScore FLOAT NULL;
+END
+
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'BallEvents')
 BEGIN
     CREATE TABLE BallEvents (

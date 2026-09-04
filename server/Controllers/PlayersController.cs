@@ -57,6 +57,7 @@ public class PlayersController : ControllerBase
                 Status = p.Status,
                 UserId = p.UserId,
                 CurrentTeamName = p.TeamPlayers.Select(tp => tp.Team.Name).FirstOrDefault(),
+                ManOfTheMatchCount = _context.Matches.Count(m => m.MOMPlayerId == p.Id),
                 CreatedAt = p.CreatedAt
             })
             .ToListAsync();
@@ -74,6 +75,8 @@ public class PlayersController : ControllerBase
 
         if (player == null) return NotFound(new { message = "Player not found." });
 
+        var momCount = await _context.Matches.CountAsync(m => m.MOMPlayerId == player.Id);
+
         return Ok(new PlayerDto
         {
             Id = player.Id,
@@ -83,6 +86,7 @@ public class PlayersController : ControllerBase
             Status = player.Status,
             UserId = player.UserId,
             CurrentTeamName = player.TeamPlayers.Select(tp => tp.Team.Name).FirstOrDefault(),
+            ManOfTheMatchCount = momCount,
             CreatedAt = player.CreatedAt
         });
     }

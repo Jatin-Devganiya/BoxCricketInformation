@@ -163,6 +163,21 @@ public class LiveScoringService : ILiveScoringService
             summary = $"{inn1Dto.BattingTeamShortName}: {inn1Dto.Runs}/{inn1Dto.Wickets} vs {inn2Dto.BattingTeamShortName}: {inn2Dto.Runs}/{inn2Dto.Wickets}";
         }
 
+        var allMatchPlayers = await _context.TeamPlayers
+            .Include(tp => tp.Player)
+            .Include(tp => tp.Team)
+            .Where(tp => tp.TeamId == match.Team1Id || tp.TeamId == match.Team2Id)
+            .Select(tp => tp.Player)
+            .ToListAsync();
+
+        var momDetails = ManOfTheMatchCalculator.Calculate(match, allMatchPlayers);
+
+        matchDto.MOMPlayerId = match.MOMPlayerId ?? momDetails.SelectedPlayerId;
+        matchDto.MOMPlayerName = match.MOMPlayer != null
+            ? $"{match.MOMPlayer.FirstName} {match.MOMPlayer.LastName}"
+            : momDetails.SelectedPlayerName;
+        matchDto.MOMScore = match.MOMScore ?? (momDetails.SelectedPlayerId.HasValue ? momDetails.TotalScore : null);
+
         return new LiveScoreDto
         {
             Match = matchDto,
@@ -171,7 +186,8 @@ public class LiveScoringService : ILiveScoringService
             Innings2 = inn2Dto,
             IsInningsComplete = (activeInningsNumber == 1 ? inn1?.Status : inn2?.Status) == "Completed",
             IsMatchComplete = isMatchComplete,
-            MatchSummary = summary
+            MatchSummary = summary,
+            MomDetails = momDetails
         };
     }
 
@@ -955,9 +971,24 @@ public class LiveScoringService : ILiveScoringService
     {
         var match = await _context.Matches
             .Include(m => m.Innings)
+                .ThenInclude(i => i.BattingPerformances)
+                    .ThenInclude(bp => bp.Player)
+            .Include(m => m.Innings)
+                .ThenInclude(i => i.BowlingPerformances)
+                    .ThenInclude(bowl => bowl.Player)
+            .Include(m => m.Innings)
+                .ThenInclude(i => i.Team)
+            .Include(m => m.Team1)
+            .Include(m => m.Team2)
             .FirstOrDefaultAsync(m => m.Id == matchId);
 
         if (match == null) return null;
+
+        foreach (var inn in match.Innings)
+        {
+            if (inn.Status == "InProgress") inn.Status = "Completed";
+            await SyncPerformancesFromEventsAsync(inn.Id);
+        }
 
         if (req.WinningTeamId.HasValue && req.WinningTeamId > 0)
         {
@@ -968,20 +999,37 @@ public class LiveScoringService : ILiveScoringService
         {
             match.Result = req.Result;
         }
+        else if (string.IsNullOrWhiteSpace(match.Result))
+        {
+            var inn1 = match.Innings.FirstOrDefault(i => i.InningsNumber == 1);
+            var inn2 = match.Innings.FirstOrDefault(i => i.InningsNumber == 2);
+            if (inn1 != null && inn2 != null)
+            {
+                DetermineMatchWinnerAndResult(match, inn1, inn2);
+            }
+        }
 
-        if (req.MOMPlayerId.HasValue && req.MOMPlayerId > 0)
+        // Authoritative Automatic MOM calculation
+        var allMatchPlayers = await _context.TeamPlayers
+            .Include(tp => tp.Player)
+            .Include(tp => tp.Team)
+            .Where(tp => tp.TeamId == match.Team1Id || tp.TeamId == match.Team2Id)
+            .Select(tp => tp.Player)
+            .ToListAsync();
+
+        var momResult = ManOfTheMatchCalculator.Calculate(match, allMatchPlayers);
+        if (momResult.SelectedPlayerId.HasValue)
+        {
+            match.MOMPlayerId = momResult.SelectedPlayerId.Value;
+            match.MOMScore = momResult.TotalScore;
+        }
+        else if (req.MOMPlayerId.HasValue && req.MOMPlayerId > 0)
         {
             match.MOMPlayerId = req.MOMPlayerId;
         }
 
         match.Status = "Completed";
         match.UpdatedAt = DateTime.UtcNow;
-
-        foreach (var inn in match.Innings)
-        {
-            if (inn.Status == "InProgress") inn.Status = "Completed";
-            await SyncPerformancesFromEventsAsync(inn.Id);
-        }
 
         await _context.SaveChangesAsync();
 
@@ -1005,18 +1053,39 @@ public class LiveScoringService : ILiveScoringService
             var inn1 = match.Innings.FirstOrDefault(i => i.InningsNumber == 1);
             if (inn1 != null)
             {
+                bool matchFinished = false;
                 if (inn.Runs > inn1.Runs)
                 {
                     inn.Status = "Completed";
                     DetermineMatchWinnerAndResult(match, inn1, inn);
                     match.Status = "Completed";
-                    await _context.SaveChangesAsync();
+                    matchFinished = true;
                 }
                 else if (inn.Balls >= maxLegalBalls || inn.Wickets >= 10)
                 {
                     inn.Status = "Completed";
                     DetermineMatchWinnerAndResult(match, inn1, inn);
                     match.Status = "Completed";
+                    matchFinished = true;
+                }
+
+                if (matchFinished)
+                {
+                    var allMatchPlayers = await _context.TeamPlayers
+                        .Include(tp => tp.Player)
+                        .Include(tp => tp.Team)
+                        .Where(tp => tp.TeamId == match.Team1Id || tp.TeamId == match.Team2Id)
+                        .Select(tp => tp.Player)
+                        .ToListAsync();
+
+                    var momResult = ManOfTheMatchCalculator.Calculate(match, allMatchPlayers);
+                    if (momResult.SelectedPlayerId.HasValue)
+                    {
+                        match.MOMPlayerId = momResult.SelectedPlayerId.Value;
+                        match.MOMScore = momResult.TotalScore;
+                    }
+
+                    match.UpdatedAt = DateTime.UtcNow;
                     await _context.SaveChangesAsync();
                 }
             }

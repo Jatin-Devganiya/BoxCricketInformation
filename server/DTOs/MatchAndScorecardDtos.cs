@@ -63,6 +63,7 @@ public class MatchDto
     public string? Result { get; set; }
     public int? MOMPlayerId { get; set; }
     public string? MOMPlayerName { get; set; }
+    public double? MOMScore { get; set; }
 }
 
 public class CreateMatchRequest
@@ -256,6 +257,7 @@ public class LiveScoreDto
     public bool IsInningsComplete { get; set; }
     public bool IsMatchComplete { get; set; }
     public string? MatchSummary { get; set; }
+    public MomCalculationResultDto? MomDetails { get; set; }
 }
 
 public class LiveInningsDto
@@ -402,4 +404,48 @@ public class CompleteMatchRequest
     public int? WinningTeamId { get; set; }
     public string? Result { get; set; }
     public int? MOMPlayerId { get; set; }
+}
+
+public class MomCalculationResultDto
+{
+    public int? SelectedPlayerId { get; set; }
+    public string? SelectedPlayerName { get; set; }
+    public string? SelectedPlayerTeamName { get; set; }
+    public double TotalScore { get; set; }
+    public double BattingPoints { get; set; }
+    public double BowlingPoints { get; set; }
+    public double AllRounderBonus { get; set; }
+    public double WinningTeamBonus { get; set; }
+    public string BattingSummary { get; set; } = "Did not bat";
+    public string BowlingSummary { get; set; } = "Did not bowl";
+    public List<PlayerMomScoreDto> Leaderboard { get; set; } = new();
+}
+
+public class PlayerMomScoreDto
+{
+    public int Rank { get; set; }
+    public int PlayerId { get; set; }
+    public string PlayerName { get; set; } = string.Empty;
+    public int TeamId { get; set; }
+    public string TeamName { get; set; } = string.Empty;
+    public double TotalScore { get; set; }
+    public double BattingPoints { get; set; }
+    public double BowlingPoints { get; set; }
+    public double AllRounderBonus { get; set; }
+    public double WinningTeamBonus { get; set; }
+    public int Runs { get; set; }
+    public int BallsFaced { get; set; }
+    public int Fours { get; set; }
+    public int Sixes { get; set; }
+    public bool IsOut { get; set; }
+    public double StrikeRate { get; set; }
+    public int Wickets { get; set; }
+    public int BallsBowled { get; set; }
+    public string OversDisplay { get; set; } = "0.0";
+    public int RunsConceded { get; set; }
+    public double EconomyRate { get; set; }
+    public int Maidens { get; set; }
+    public string BattingSummary { get; set; } = string.Empty;
+    public string BowlingSummary { get; set; } = string.Empty;
+    public bool HasContribution { get; set; }
 }

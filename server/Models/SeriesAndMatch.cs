@@ -39,6 +39,7 @@ public class Match
     public string? Result { get; set; }
     public int? MOMPlayerId { get; set; }
     public Player? MOMPlayer { get; set; }
+    public double? MOMScore { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;

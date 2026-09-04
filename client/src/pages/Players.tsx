@@ -10,7 +10,9 @@ import {
   Edit2,
   Trash2,
   Activity,
-  AlertCircle
+  AlertCircle,
+  Trophy,
+  Award
 } from 'lucide-react';
 
 export const Players: React.FC = () => {
@@ -213,19 +215,20 @@ export const Players: React.FC = () => {
                 <th>Category</th>
                 <th>Current Team</th>
                 <th>Status</th>
+                <th>MOM Awards</th>
                 <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                     Loading players...
                   </td>
                 </tr>
               ) : players.length === 0 ? (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                     No players found matching your criteria.
                   </td>
                 </tr>
@@ -257,6 +260,28 @@ export const Players: React.FC = () => {
                       <span className={`badge ${p.status === 'Active' ? 'badge-success' : 'badge-danger'}`}>
                         {p.status}
                       </span>
+                    </td>
+                    <td>
+                      {(p.manOfTheMatchCount ?? 0) > 0 ? (
+                        <span
+                          className="badge badge-warning"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.3rem',
+                            fontWeight: 700,
+                            padding: '0.2rem 0.55rem',
+                            background: 'rgba(245, 158, 11, 0.18)',
+                            border: '1px solid rgba(245, 158, 11, 0.35)',
+                            color: '#fbbf24'
+                          }}
+                          title={`${p.manOfTheMatchCount} Man of the Match award${p.manOfTheMatchCount === 1 ? '' : 's'}`}
+                        >
+                          <Trophy size={13} /> {p.manOfTheMatchCount}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>-</span>
+                      )}
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', gap: '0.5rem' }}>
@@ -401,6 +426,63 @@ export const Players: React.FC = () => {
           <div>No statistics found.</div>
         ) : (
           <div>
+            {/* Career Overview Banner */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                gap: '0.75rem',
+                marginBottom: '1.25rem',
+                padding: '0.85rem 1rem',
+                background: 'linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.01) 100%)',
+                borderRadius: '10px',
+                border: '1px solid var(--border-color)',
+                alignItems: 'center'
+              }}
+            >
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Discipline
+                </div>
+                <div style={{ fontSize: '1rem', fontWeight: 600, marginTop: '0.2rem', color: 'var(--text-primary)' }}>
+                  {selectedStats.playerCategory}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Career Matches
+                </div>
+                <div style={{ fontSize: '1.2rem', fontWeight: 700, marginTop: '0.2rem' }}>
+                  {Math.max(selectedStats.batting.matches, selectedStats.bowling.matches)}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  background: 'rgba(245, 158, 11, 0.12)',
+                  borderRadius: '8px',
+                  padding: '0.5rem 0.75rem',
+                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between'
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: '0.75rem', color: '#fbbf24', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                    <Trophy size={14} /> Man of the Match
+                  </div>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>
+                    MOM Awards Won
+                  </div>
+                </div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fbbf24' }}>
+                  {selectedStats.manOfTheMatchCount ?? selectedStats.momCount ?? 0}
+                </div>
+              </div>
+            </div>
+
             <div className="tabs-nav">
               <button
                 className={`tab-btn ${activeStatsTab === 'batting' ? 'active' : ''}`}

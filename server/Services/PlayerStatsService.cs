@@ -86,11 +86,15 @@ public class PlayerStatsService : IPlayerStatsService
         int stumpings = await _context.BallEvents.CountAsync(b => b.FielderPlayerId == playerId && b.WicketType == "Stumped");
         int runOuts = await _context.BallEvents.CountAsync(b => b.FielderPlayerId == playerId && b.WicketType == "RunOut");
 
+        // Man of the Match awards count
+        int manOfTheMatchCount = await _context.Matches.CountAsync(m => m.MOMPlayerId == playerId);
+
         return new PlayerStatisticsDto
         {
             PlayerId = player.Id,
             PlayerName = $"{player.FirstName} {player.LastName}",
             PlayerCategory = player.PlayerCategory,
+            ManOfTheMatchCount = manOfTheMatchCount,
             Batting = new BattingStatsDto
             {
                 Matches = battingMatches,

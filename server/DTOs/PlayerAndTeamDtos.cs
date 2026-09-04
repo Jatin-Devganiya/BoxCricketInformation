@@ -10,6 +10,7 @@ public class PlayerDto
     public string Status { get; set; } = string.Empty;
     public int? UserId { get; set; }
     public string? CurrentTeamName { get; set; }
+    public int ManOfTheMatchCount { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 
@@ -38,6 +39,8 @@ public class PlayerStatisticsDto
     public int PlayerId { get; set; }
     public string PlayerName { get; set; } = string.Empty;
     public string PlayerCategory { get; set; } = string.Empty;
+    public int ManOfTheMatchCount { get; set; }
+    public int MomCount => ManOfTheMatchCount;
     public BattingStatsDto Batting { get; set; } = new();
     public BowlingStatsDto Bowling { get; set; } = new();
     public FieldingStatsDto Fielding { get; set; } = new();
