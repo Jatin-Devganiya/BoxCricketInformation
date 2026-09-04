@@ -280,6 +280,7 @@ export interface LiveInnings {
   id: number;
   matchId: number;
   inningsNumber: number;
+  currentOverNumber: number;
   battingTeamId: number;
   battingTeamName: string;
   battingTeamShortName: string;
@@ -298,10 +299,13 @@ export interface LiveInnings {
   striker?: LiveBatsman;
   nonStriker?: LiveBatsman;
   currentBowler?: LiveBowler;
+  previousBowlerId?: number;
+  previousBowlerName?: string;
   isOverComplete: boolean;
   requiresNewBatsman: boolean;
   lastDismissedPlayerId?: number;
   currentOverDeliveries: BallEventItem[];
+  allDeliveries?: BallEventItem[];
   battingPerformances: BattingRecord[];
   bowlingPerformances: BowlingRecord[];
 }
@@ -331,6 +335,11 @@ export interface RecordBallPayload {
   batRuns?: number;
   extraRuns?: number;
   extraType?: string;
+  bowlerPlayerId?: number;
+  strikerPlayerId?: number;
+  nonStrikerPlayerId?: number;
+  overNumber?: number;
+  ballNumber?: number;
 }
 
 export interface RecordWicketPayload {

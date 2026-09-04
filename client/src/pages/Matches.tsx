@@ -330,6 +330,10 @@ export const Matches: React.FC<MatchesProps> = ({
         runs,
         batRuns: runs,
         extraRuns: 0,
+        bowlerPlayerId: currentInnings.currentBowler?.playerId,
+        strikerPlayerId: currentInnings.striker?.playerId,
+        nonStrikerPlayerId: currentInnings.nonStriker?.playerId,
+        overNumber: currentInnings.currentOverNumber,
       });
       setActiveLiveScore(updated);
       fetchMatches();
@@ -357,6 +361,10 @@ export const Matches: React.FC<MatchesProps> = ({
         batRuns,
         extraRuns: 1,
         extraType: 'NoBall',
+        bowlerPlayerId: currentInnings.currentBowler?.playerId,
+        strikerPlayerId: currentInnings.striker?.playerId,
+        nonStrikerPlayerId: currentInnings.nonStriker?.playerId,
+        overNumber: currentInnings.currentOverNumber,
       });
       setActiveLiveScore(updated);
       fetchMatches();
@@ -378,6 +386,10 @@ export const Matches: React.FC<MatchesProps> = ({
         runs,
         extraRuns: runs,
         extraType: 'Wide',
+        bowlerPlayerId: currentInnings.currentBowler?.playerId,
+        strikerPlayerId: currentInnings.striker?.playerId,
+        nonStrikerPlayerId: currentInnings.nonStriker?.playerId,
+        overNumber: currentInnings.currentOverNumber,
       });
       setActiveLiveScore(updated);
       fetchMatches();
@@ -399,6 +411,10 @@ export const Matches: React.FC<MatchesProps> = ({
         runs,
         extraRuns: runs,
         extraType: 'LegBye',
+        bowlerPlayerId: currentInnings.currentBowler?.playerId,
+        strikerPlayerId: currentInnings.striker?.playerId,
+        nonStrikerPlayerId: currentInnings.nonStriker?.playerId,
+        overNumber: currentInnings.currentOverNumber,
       });
       setActiveLiveScore(updated);
       fetchMatches();
@@ -420,6 +436,10 @@ export const Matches: React.FC<MatchesProps> = ({
         runs: 0,
         batRuns: 0,
         extraRuns: 0,
+        bowlerPlayerId: currentInnings.currentBowler?.playerId,
+        strikerPlayerId: currentInnings.striker?.playerId,
+        nonStrikerPlayerId: currentInnings.nonStriker?.playerId,
+        overNumber: currentInnings.currentOverNumber,
       });
       setActiveLiveScore(updated);
       fetchMatches();
@@ -1329,11 +1349,11 @@ export const Matches: React.FC<MatchesProps> = ({
                     {currentInnings?.isOverComplete && (
                       <div className="over-complete-box">
                         <div>
-                          <div style={{ fontWeight: 800, fontSize: '1rem', color: '#10b981' }}>
-                            Over Complete!
+                          <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#10b981' }}>
+                            Over {currentInnings?.currentOverNumber ?? (Math.floor((currentInnings?.legalBalls || 0) / 6))} Complete!
                           </div>
-                          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                            6 legal deliveries completed in this over. Striker and non-striker ends swapped.
+                          <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                            6 legal deliveries completed in this over by <strong>{currentInnings?.previousBowlerName || currentInnings?.currentBowler?.playerName}</strong>. Striker and non-striker ends swapped.
                           </div>
                         </div>
                         <button
@@ -1342,6 +1362,7 @@ export const Matches: React.FC<MatchesProps> = ({
                             setNextBowlerId(0);
                             setNextBowlerModalOpen(true);
                           }}
+                          disabled={actionLoading}
                         >
                           Select Next Bowler
                         </button>
@@ -1352,17 +1373,17 @@ export const Matches: React.FC<MatchesProps> = ({
                     <div className="over-timeline-box">
                       <div className="over-timeline-header">
                         <span>
-                          Current Over Deliveries (
+                          Over {currentInnings?.currentOverNumber ?? 1} Deliveries (
                           {currentInnings?.currentOverDeliveries?.filter((b) => b.isLegalBall).length || 0}/6 legal balls)
                         </span>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                          Total Deliveries in Over: {currentInnings?.currentOverDeliveries?.length || 0}
+                          Bowler: <strong style={{ color: 'var(--text-primary)' }}>{currentInnings?.currentBowler?.playerName || 'Unassigned'}</strong> • Balls in Over: {currentInnings?.currentOverDeliveries?.length || 0}
                         </span>
                       </div>
                       <div className="over-pills-row">
                         {!currentInnings?.currentOverDeliveries || currentInnings.currentOverDeliveries.length === 0 ? (
                           <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', padding: '0.4rem 0' }}>
-                            Ready to bowl over... click a score button below.
+                            Ready to bowl Over {currentInnings?.currentOverNumber ?? 1}... click a score button below.
                           </div>
                         ) : (
                           currentInnings.currentOverDeliveries.map((ball) => {
@@ -1378,7 +1399,7 @@ export const Matches: React.FC<MatchesProps> = ({
                               <div
                                 key={ball.id}
                                 className={`ball-pill ${pillClass}`}
-                                title={`Ball #${ball.ballNumber} (Del #${ball.deliveryNumber}): ${ball.runs} runs - ${ball.strikerName} facing ${ball.bowlerName}`}
+                                title={`Over #${ball.overNumber}, Ball #${ball.ballNumber} (Del #${ball.deliveryNumber}): ${ball.runs} runs - ${ball.strikerName} facing ${ball.bowlerName}`}
                               >
                                 {ball.displayText}
                               </div>
@@ -1387,6 +1408,71 @@ export const Matches: React.FC<MatchesProps> = ({
                         )}
                       </div>
                     </div>
+
+                    {/* Previous Completed Overs History */}
+                    {currentInnings?.allDeliveries && currentInnings.allDeliveries.some((b) => b.overNumber < (currentInnings.currentOverNumber || 1)) && (
+                      <div style={{ marginTop: '0.75rem', padding: '0.75rem 1rem', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
+                          Previous Overs History
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                          {Array.from(
+                            new Set(
+                              currentInnings.allDeliveries
+                                .filter((b) => b.overNumber < (currentInnings.currentOverNumber || 1))
+                                .map((b) => b.overNumber)
+                            )
+                          ).map((ovNum) => {
+                            const ovBalls = currentInnings.allDeliveries?.filter((b) => b.overNumber === ovNum) || [];
+                            const bName = ovBalls[0]?.bowlerName || 'Bowler';
+                            const runsInOv = ovBalls.reduce((acc, b) => acc + b.runs, 0);
+                            const wicketsInOv = ovBalls.filter((b) => b.isWicket).length;
+                            return (
+                              <div
+                                key={ovNum}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  flexWrap: 'wrap',
+                                  gap: '0.5rem',
+                                  padding: '0.4rem 0.6rem',
+                                  background: 'rgba(255,255,255,0.03)',
+                                  borderRadius: '6px',
+                                  fontSize: '0.82rem',
+                                }}
+                              >
+                                <div>
+                                  Over {ovNum} • <strong style={{ color: 'var(--text-primary)' }}>{bName}</strong>: {runsInOv} runs{wicketsInOv > 0 ? `, ${wicketsInOv} wkt` : ''}
+                                </div>
+                                <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
+                                  {ovBalls.map((b) => {
+                                    let pillClass = 'ball-pill-run';
+                                    if (b.isWicket) pillClass = 'ball-pill-wicket';
+                                    else if (b.batRuns === 4) pillClass = 'ball-pill-boundary-four';
+                                    else if (b.batRuns === 6) pillClass = 'ball-pill-boundary-six';
+                                    else if (b.eventType === 'Wide' || b.eventType === 'NoBall' || b.eventType === 'LegBye')
+                                      pillClass = 'ball-pill-extra';
+                                    else if (b.runs === 0) pillClass = 'ball-pill-dot';
+
+                                    return (
+                                      <div
+                                        key={b.id}
+                                        className={`ball-pill ${pillClass}`}
+                                        style={{ width: '22px', height: '22px', fontSize: '0.7rem' }}
+                                        title={`Over ${b.overNumber}, Ball ${b.ballNumber}: ${b.runs} runs`}
+                                      >
+                                        {b.displayText}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Primary Ball Scoring Controls */}
                     <div className="scoring-pad-wrapper">
@@ -1927,12 +2013,21 @@ export const Matches: React.FC<MatchesProps> = ({
         }
       >
         <div style={{ padding: '0.5rem 0' }}>
+          <div style={{ marginBottom: '1rem', padding: '0.75rem', background: 'rgba(255,255,255,0.04)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Over {currentInnings?.currentOverNumber || 1} Complete
+            </div>
+            <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)', marginTop: '0.25rem' }}>
+              Previous Bowler: <span style={{ color: 'var(--accent-cricket)' }}>{currentInnings?.previousBowlerName || currentInnings?.currentBowler?.playerName || 'N/A'}</span>
+            </div>
+          </div>
+
           <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
-            The previous over is complete. Select the bowler for the next over (consecutive overs by the same bowler are not allowed):
+            Select the bowler for Over {(currentInnings?.currentOverNumber || 1) + 1} (consecutive overs by the same bowler are not allowed):
           </div>
 
           <div className="form-group">
-            <label className="form-label">Next Bowler</label>
+            <label className="form-label">Select Next Bowler *</label>
             <select
               className="form-select"
               value={nextBowlerId}
@@ -1940,7 +2035,10 @@ export const Matches: React.FC<MatchesProps> = ({
             >
               <option value={0}>-- Select Next Bowler --</option>
               {bowlingPlayers
-                .filter((p) => p.id !== currentInnings?.currentBowler?.playerId)
+                .filter((p) => {
+                  const prevId = currentInnings?.previousBowlerId || currentInnings?.currentBowler?.playerId;
+                  return p.id !== prevId;
+                })
                 .map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.fullName} ({p.playerCategory})

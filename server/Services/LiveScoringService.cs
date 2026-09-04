@@ -104,8 +104,38 @@ public class LiveScoringService : ILiveScoringService
                 .ToListAsync()
             : new List<BallEvent>();
 
-        var inn1Dto = inn1 != null ? BuildLiveInningsDto(match, inn1, inn1Events, null) : null;
-        var inn2Dto = inn2 != null ? BuildLiveInningsDto(match, inn2, inn2Events, inn1?.Runs) : null;
+        // Build comprehensive players lookup dictionary to avoid any EF Core navigation caching issues
+        var playerIds = new HashSet<int>();
+        if (inn1?.CurrentStrikerId.HasValue == true) playerIds.Add(inn1.CurrentStrikerId.Value);
+        if (inn1?.CurrentNonStrikerId.HasValue == true) playerIds.Add(inn1.CurrentNonStrikerId.Value);
+        if (inn1?.CurrentBowlerId.HasValue == true) playerIds.Add(inn1.CurrentBowlerId.Value);
+        if (inn2?.CurrentStrikerId.HasValue == true) playerIds.Add(inn2.CurrentStrikerId.Value);
+        if (inn2?.CurrentNonStrikerId.HasValue == true) playerIds.Add(inn2.CurrentNonStrikerId.Value);
+        if (inn2?.CurrentBowlerId.HasValue == true) playerIds.Add(inn2.CurrentBowlerId.Value);
+
+        foreach (var ev in inn1Events)
+        {
+            playerIds.Add(ev.StrikerPlayerId);
+            playerIds.Add(ev.NonStrikerPlayerId);
+            playerIds.Add(ev.BowlerPlayerId);
+            if (ev.DismissedPlayerId.HasValue) playerIds.Add(ev.DismissedPlayerId.Value);
+            if (ev.FielderPlayerId.HasValue) playerIds.Add(ev.FielderPlayerId.Value);
+        }
+        foreach (var ev in inn2Events)
+        {
+            playerIds.Add(ev.StrikerPlayerId);
+            playerIds.Add(ev.NonStrikerPlayerId);
+            playerIds.Add(ev.BowlerPlayerId);
+            if (ev.DismissedPlayerId.HasValue) playerIds.Add(ev.DismissedPlayerId.Value);
+            if (ev.FielderPlayerId.HasValue) playerIds.Add(ev.FielderPlayerId.Value);
+        }
+
+        var playersLookup = await _context.Players
+            .Where(p => playerIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id);
+
+        var inn1Dto = inn1 != null ? BuildLiveInningsDto(match, inn1, inn1Events, null, playersLookup) : null;
+        var inn2Dto = inn2 != null ? BuildLiveInningsDto(match, inn2, inn2Events, inn1?.Runs, playersLookup) : null;
 
         int activeInningsNumber = 1;
         if (inn1 != null && inn1.Status == "Completed")
@@ -145,7 +175,12 @@ public class LiveScoringService : ILiveScoringService
         };
     }
 
-    private static LiveInningsDto BuildLiveInningsDto(Match match, MatchInnings inn, List<BallEvent> events, int? inn1Runs)
+    private static LiveInningsDto BuildLiveInningsDto(
+        Match match, 
+        MatchInnings inn, 
+        List<BallEvent> events, 
+        int? inn1Runs,
+        Dictionary<int, Player> playersLookup)
     {
         string battingTeamName = inn.Team?.Name ?? (inn.TeamId == match.Team1Id ? match.Team1.Name : match.Team2.Name);
         string battingShort = inn.Team?.ShortName ?? (inn.TeamId == match.Team1Id ? match.Team1.ShortName : match.Team2.ShortName);
@@ -155,13 +190,29 @@ public class LiveScoringService : ILiveScoringService
         string bowlingShort = isTeam1Batting ? match.Team2.ShortName : match.Team1.ShortName;
         int bowlingTeamId = isTeam1Batting ? match.Team2Id : match.Team1Id;
 
-        // Current over deliveries
-        int currentOverNumber = (inn.Balls / 6) + 1;
-        if (inn.Balls > 0 && inn.Balls % 6 == 0 && events.Count > 0)
-        {
-            var lastEvent = events.Last();
-            currentOverNumber = lastEvent.OverNumber;
-        }
+        var lastEvent = events.LastOrDefault();
+
+        int completedOverNum = inn.Balls / 6;
+        var completedOverLastEvent = inn.Balls >= 6
+            ? events.Where(e => e.OverNumber == completedOverNum).OrderBy(e => e.Id).LastOrDefault()
+            : null;
+
+        // An over has completed and is waiting for next bowler selection if:
+        // 1. Innings is InProgress
+        // 2. Legal balls is a multiple of 6 and > 0
+        // 3. We have ball events
+        // 4. The last event in the match was in the completed over (i.e. no events yet in the new over)
+        // 5. CurrentBowlerId in MatchInnings is STILL the bowler who completed the last ball
+        bool isOverAwaitingNextBowler = inn.Status == "InProgress"
+            && inn.Balls > 0
+            && (inn.Balls % 6 == 0)
+            && lastEvent != null
+            && lastEvent.OverNumber == completedOverNum
+            && inn.CurrentBowlerId == lastEvent.BowlerPlayerId;
+
+        int currentOverNumber = isOverAwaitingNextBowler
+            ? completedOverNum
+            : completedOverNum + 1;
 
         var currentOverEvents = events
             .Where(e => e.OverNumber == currentOverNumber)
@@ -169,11 +220,26 @@ public class LiveScoringService : ILiveScoringService
             .Select(MapBallEventDto)
             .ToList();
 
-        int legalBallsInCurrentOver = events
-            .Where(e => e.OverNumber == currentOverNumber && e.IsLegalBall)
-            .Count();
+        var allEventsDto = events
+            .OrderBy(e => e.Id)
+            .Select(MapBallEventDto)
+            .ToList();
 
-        bool isOverComplete = legalBallsInCurrentOver >= 6 && inn.Balls > 0 && (inn.Balls % 6 == 0);
+        bool isOverComplete = isOverAwaitingNextBowler;
+
+        int? previousBowlerId = completedOverLastEvent?.BowlerPlayerId;
+        string? previousBowlerName = null;
+        if (completedOverLastEvent != null)
+        {
+            if (playersLookup.TryGetValue(completedOverLastEvent.BowlerPlayerId, out var prevPlayer))
+            {
+                previousBowlerName = $"{prevPlayer.FirstName} {prevPlayer.LastName}";
+            }
+            else if (completedOverLastEvent.BowlerPlayer != null)
+            {
+                previousBowlerName = $"{completedOverLastEvent.BowlerPlayer.FirstName} {completedOverLastEvent.BowlerPlayer.LastName}";
+            }
+        }
 
         bool requiresNewBatsman = (inn.CurrentStrikerId == null || inn.CurrentNonStrikerId == null) && inn.Status == "InProgress";
         int? lastDismissedId = events.LastOrDefault(e => e.IsWicket)?.DismissedPlayerId;
@@ -182,6 +248,16 @@ public class LiveScoringService : ILiveScoringService
         LiveBatsmanDto? strikerDto = null;
         if (inn.CurrentStrikerId.HasValue)
         {
+            string strikerName = "Striker";
+            if (playersLookup.TryGetValue(inn.CurrentStrikerId.Value, out var sp))
+            {
+                strikerName = $"{sp.FirstName} {sp.LastName}";
+            }
+            else if (inn.CurrentStriker != null)
+            {
+                strikerName = $"{inn.CurrentStriker.FirstName} {inn.CurrentStriker.LastName}";
+            }
+
             var strikerEvents = events.Where(e => e.StrikerPlayerId == inn.CurrentStrikerId.Value).ToList();
             int runs = strikerEvents.Sum(e => e.BatRuns);
             int ballsFaced = strikerEvents.Count(e => e.EventType != "Wide");
@@ -195,7 +271,7 @@ public class LiveScoringService : ILiveScoringService
             strikerDto = new LiveBatsmanDto
             {
                 PlayerId = inn.CurrentStrikerId.Value,
-                PlayerName = inn.CurrentStriker != null ? $"{inn.CurrentStriker.FirstName} {inn.CurrentStriker.LastName}" : "Striker",
+                PlayerName = strikerName,
                 Runs = runs,
                 BallsFaced = ballsFaced,
                 Fours = fours,
@@ -213,6 +289,16 @@ public class LiveScoringService : ILiveScoringService
         LiveBatsmanDto? nonStrikerDto = null;
         if (inn.CurrentNonStrikerId.HasValue)
         {
+            string nonStrikerName = "Non-Striker";
+            if (playersLookup.TryGetValue(inn.CurrentNonStrikerId.Value, out var nsp))
+            {
+                nonStrikerName = $"{nsp.FirstName} {nsp.LastName}";
+            }
+            else if (inn.CurrentNonStriker != null)
+            {
+                nonStrikerName = $"{inn.CurrentNonStriker.FirstName} {inn.CurrentNonStriker.LastName}";
+            }
+
             var nonStrikerEvents = events.Where(e => e.StrikerPlayerId == inn.CurrentNonStrikerId.Value).ToList();
             int runs = nonStrikerEvents.Sum(e => e.BatRuns);
             int ballsFaced = nonStrikerEvents.Count(e => e.EventType != "Wide");
@@ -226,7 +312,7 @@ public class LiveScoringService : ILiveScoringService
             nonStrikerDto = new LiveBatsmanDto
             {
                 PlayerId = inn.CurrentNonStrikerId.Value,
-                PlayerName = inn.CurrentNonStriker != null ? $"{inn.CurrentNonStriker.FirstName} {inn.CurrentNonStriker.LastName}" : "Non-Striker",
+                PlayerName = nonStrikerName,
                 Runs = runs,
                 BallsFaced = ballsFaced,
                 Fours = fours,
@@ -244,6 +330,16 @@ public class LiveScoringService : ILiveScoringService
         LiveBowlerDto? bowlerDto = null;
         if (inn.CurrentBowlerId.HasValue)
         {
+            string bowlerName = "Bowler";
+            if (playersLookup.TryGetValue(inn.CurrentBowlerId.Value, out var bp))
+            {
+                bowlerName = $"{bp.FirstName} {bp.LastName}";
+            }
+            else if (inn.CurrentBowler != null)
+            {
+                bowlerName = $"{inn.CurrentBowler.FirstName} {inn.CurrentBowler.LastName}";
+            }
+
             var bowlerEvents = events.Where(e => e.BowlerPlayerId == inn.CurrentBowlerId.Value).ToList();
             int legalBalls = bowlerEvents.Count(e => e.IsLegalBall);
             int conceded = bowlerEvents.Sum(e => e.BatRuns + (e.ExtraType == "Wide" || e.ExtraType == "NoBall" ? e.ExtraRuns : 0));
@@ -265,7 +361,7 @@ public class LiveScoringService : ILiveScoringService
             bowlerDto = new LiveBowlerDto
             {
                 PlayerId = inn.CurrentBowlerId.Value,
-                PlayerName = inn.CurrentBowler != null ? $"{inn.CurrentBowler.FirstName} {inn.CurrentBowler.LastName}" : "Bowler",
+                PlayerName = bowlerName,
                 BallsBowled = legalBalls,
                 OversDisplay = CricketCalculationHelper.ToCricketOvers(legalBalls),
                 RunsConceded = conceded,
@@ -297,6 +393,7 @@ public class LiveScoringService : ILiveScoringService
             Id = inn.Id,
             MatchId = inn.MatchId,
             InningsNumber = inn.InningsNumber,
+            CurrentOverNumber = currentOverNumber,
             BattingTeamId = inn.TeamId,
             BattingTeamName = battingTeamName,
             BattingTeamShortName = battingShort,
@@ -315,10 +412,13 @@ public class LiveScoringService : ILiveScoringService
             Striker = strikerDto,
             NonStriker = nonStrikerDto,
             CurrentBowler = bowlerDto,
+            PreviousBowlerId = previousBowlerId,
+            PreviousBowlerName = previousBowlerName,
             IsOverComplete = isOverComplete,
             RequiresNewBatsman = requiresNewBatsman,
             LastDismissedPlayerId = lastDismissedId,
             CurrentOverDeliveries = currentOverEvents,
+            AllDeliveries = allEventsDto,
             BattingPerformances = inn.BattingPerformances.Select(bp => new BattingRecordDto
             {
                 Id = bp.Id,
@@ -484,9 +584,34 @@ public class LiveScoringService : ILiveScoringService
             throw new InvalidOperationException("Innings is not in progress.");
         }
 
+        if (req.BowlerPlayerId.HasValue && req.BowlerPlayerId.Value > 0 && req.BowlerPlayerId.Value != inn.CurrentBowlerId)
+        {
+            var requestedBowler = await _context.Players.FindAsync(req.BowlerPlayerId.Value);
+            if (requestedBowler != null)
+            {
+                inn.CurrentBowler = requestedBowler;
+                inn.CurrentBowlerId = requestedBowler.Id;
+            }
+        }
+
         if (!inn.CurrentStrikerId.HasValue || !inn.CurrentNonStrikerId.HasValue || !inn.CurrentBowlerId.HasValue)
         {
             throw new InvalidOperationException("Striker, Non-Striker, and Bowler must all be set before recording a ball.");
+        }
+
+        // Over completion check: if over ended, require next bowler selection before accepting new balls
+        if (inn.Balls > 0 && inn.Balls % 6 == 0)
+        {
+            int completedOverNum = inn.Balls / 6;
+            var lastBallEvent = await _context.BallEvents
+                .Where(b => b.InningsId == inn.Id)
+                .OrderBy(b => b.Id)
+                .LastOrDefaultAsync();
+
+            if (lastBallEvent != null && lastBallEvent.OverNumber == completedOverNum && inn.CurrentBowlerId == lastBallEvent.BowlerPlayerId)
+            {
+                throw new InvalidOperationException("Current over is complete. Please select the next bowler before scoring.");
+            }
         }
 
         bool isLegalBall = !(req.EventType == "NoBall" || req.EventType == "Wide" || req.EventType == "DeadBall");
@@ -731,21 +856,65 @@ public class LiveScoringService : ILiveScoringService
     public async Task<LiveScoreDto?> NextOverAsync(int matchId, int inningsId, NextOverRequest req)
     {
         var inn = await _context.MatchInnings
+            .Include(i => i.Match)
+            .Include(i => i.CurrentBowler)
             .FirstOrDefaultAsync(i => i.Id == inningsId && i.MatchId == matchId);
 
         if (inn == null) return null;
+
+        if (inn.Status != "InProgress")
+        {
+            throw new InvalidOperationException("Innings is not in progress.");
+        }
 
         if (inn.Balls % 6 != 0 || inn.Balls == 0)
         {
             throw new InvalidOperationException("Current over is not yet complete (requires 6 legal balls).");
         }
 
-        if (inn.CurrentBowlerId == req.NextBowlerPlayerId)
+        int completedOverNum = inn.Balls / 6;
+        var lastBallEvent = await _context.BallEvents
+            .Where(b => b.InningsId == inn.Id && b.OverNumber == completedOverNum)
+            .OrderBy(b => b.Id)
+            .LastOrDefaultAsync();
+
+        if (lastBallEvent != null && lastBallEvent.BowlerPlayerId == req.NextBowlerPlayerId)
         {
             throw new InvalidOperationException("Consecutive overs by the same bowler are not allowed.");
         }
 
-        inn.CurrentBowlerId = req.NextBowlerPlayerId;
+        // Idempotent safety: if bowler is already set to the requested bowler, simply return current state
+        if (inn.CurrentBowlerId == req.NextBowlerPlayerId)
+        {
+            return await GetLiveScoreAsync(matchId);
+        }
+
+        var nextBowler = await _context.Players.FindAsync(req.NextBowlerPlayerId);
+        if (nextBowler == null)
+        {
+            throw new InvalidOperationException("Selected bowler not found.");
+        }
+
+        // Validate bowler belongs to the bowling team if roster exists
+        int bowlingTeamId = inn.Match != null
+            ? (inn.Match.Team1Id == inn.TeamId ? inn.Match.Team2Id : inn.Match.Team1Id)
+            : 0;
+
+        if (bowlingTeamId > 0)
+        {
+            bool hasRoster = await _context.TeamPlayers.AnyAsync(tp => tp.TeamId == bowlingTeamId && tp.Status == "Active");
+            if (hasRoster)
+            {
+                bool belongsToBowlingTeam = await _context.TeamPlayers.AnyAsync(tp => tp.TeamId == bowlingTeamId && tp.PlayerId == req.NextBowlerPlayerId && tp.Status == "Active");
+                if (!belongsToBowlingTeam)
+                {
+                    throw new InvalidOperationException("Selected bowler does not belong to the bowling team.");
+                }
+            }
+        }
+
+        inn.CurrentBowlerId = nextBowler.Id;
+        inn.CurrentBowler = nextBowler;
         await _context.SaveChangesAsync();
 
         return await GetLiveScoreAsync(matchId);

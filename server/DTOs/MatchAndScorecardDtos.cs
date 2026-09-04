@@ -263,6 +263,7 @@ public class LiveInningsDto
     public int Id { get; set; }
     public int MatchId { get; set; }
     public int InningsNumber { get; set; }
+    public int CurrentOverNumber { get; set; } = 1;
     public int BattingTeamId { get; set; }
     public string BattingTeamName { get; set; } = string.Empty;
     public string BattingTeamShortName { get; set; } = string.Empty;
@@ -283,11 +284,15 @@ public class LiveInningsDto
     public LiveBatsmanDto? NonStriker { get; set; }
     public LiveBowlerDto? CurrentBowler { get; set; }
 
+    public int? PreviousBowlerId { get; set; }
+    public string? PreviousBowlerName { get; set; }
+
     public bool IsOverComplete { get; set; }
     public bool RequiresNewBatsman { get; set; }
     public int? LastDismissedPlayerId { get; set; }
 
     public List<BallEventDto> CurrentOverDeliveries { get; set; } = new();
+    public List<BallEventDto> AllDeliveries { get; set; } = new();
     public List<BattingRecordDto> BattingPerformances { get; set; } = new();
     public List<BowlingRecordDto> BowlingPerformances { get; set; } = new();
 }
@@ -367,6 +372,11 @@ public class RecordBallRequest
     public int BatRuns { get; set; } = 0; // Runs from bat (striker)
     public int ExtraRuns { get; set; } = 0; // Runs from extras
     public string ExtraType { get; set; } = "None"; // None, Wide, NoBall, LegBye
+    public int? BowlerPlayerId { get; set; }
+    public int? StrikerPlayerId { get; set; }
+    public int? NonStrikerPlayerId { get; set; }
+    public int? OverNumber { get; set; }
+    public int? BallNumber { get; set; }
 }
 
 public class RecordWicketRequest
