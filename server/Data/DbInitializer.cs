@@ -100,12 +100,19 @@ END
         if (!await context.Roles.AnyAsync())
         {
             var adminRole = new Role { Name = "Admin" };
+            var umpireRole = new Role { Name = "Umpire" };
             var userRole = new Role { Name = "User" };
-            await context.Roles.AddRangeAsync(adminRole, userRole);
+            await context.Roles.AddRangeAsync(adminRole, umpireRole, userRole);
+            await context.SaveChangesAsync();
+        }
+        else if (!await context.Roles.AnyAsync(r => r.Name == "Umpire"))
+        {
+            await context.Roles.AddAsync(new Role { Name = "Umpire" });
             await context.SaveChangesAsync();
         }
 
         var adminRoleObj = await context.Roles.FirstAsync(r => r.Name == "Admin");
+        var umpireRoleObj = await context.Roles.FirstAsync(r => r.Name == "Umpire");
         var userRoleObj = await context.Roles.FirstAsync(r => r.Name == "User");
 
         // 2. Seed Users
@@ -122,6 +129,17 @@ END
                 UpdatedAt = DateTime.UtcNow
             };
 
+            var umpireUser = new User
+            {
+                Username = "umpire",
+                FirstName = "Official",
+                LastName = "Umpire",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("Umpire@123"),
+                Status = "Active",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
             var scorerUser = new User
             {
                 Username = "user",
@@ -133,13 +151,32 @@ END
                 UpdatedAt = DateTime.UtcNow
             };
 
-            await context.Users.AddRangeAsync(adminUser, scorerUser);
+            await context.Users.AddRangeAsync(adminUser, umpireUser, scorerUser);
             await context.SaveChangesAsync();
 
             await context.UserRoles.AddRangeAsync(
                 new UserRole { UserId = adminUser.Id, RoleId = adminRoleObj.Id },
+                new UserRole { UserId = umpireUser.Id, RoleId = umpireRoleObj.Id },
                 new UserRole { UserId = scorerUser.Id, RoleId = userRoleObj.Id }
             );
+            await context.SaveChangesAsync();
+        }
+        else if (!await context.Users.AnyAsync(u => u.Username.ToLower() == "umpire"))
+        {
+            var umpireUser = new User
+            {
+                Username = "umpire",
+                FirstName = "Official",
+                LastName = "Umpire",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("Umpire@123"),
+                Status = "Active",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            await context.Users.AddAsync(umpireUser);
+            await context.SaveChangesAsync();
+
+            await context.UserRoles.AddAsync(new UserRole { UserId = umpireUser.Id, RoleId = umpireRoleObj.Id });
             await context.SaveChangesAsync();
         }
 

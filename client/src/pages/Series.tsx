@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { seriesApi } from '../api/client';
 import { Series as SeriesType, SeriesDetail } from '../types';
+import { useAuth } from '../context/AuthContext';
 import { Modal } from '../components/Modal';
 import {
   Calendar,
@@ -16,6 +17,7 @@ interface SeriesProps {
 }
 
 export const Series: React.FC<SeriesProps> = ({ onViewScorecard }) => {
+  const { canManageCricket } = useAuth();
   const [seriesList, setSeriesList] = useState<SeriesType[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -136,9 +138,11 @@ export const Series: React.FC<SeriesProps> = ({ onViewScorecard }) => {
             Organize single-day box cricket tournaments or multi-day leagues
           </p>
         </div>
-        <button className="btn btn-primary" onClick={handleOpenCreate}>
-          <Plus size={16} /> Create Series
-        </button>
+        {canManageCricket && (
+          <button className="btn btn-primary" onClick={handleOpenCreate}>
+            <Plus size={16} /> Create Series
+          </button>
+        )}
       </div>
 
       <div className="card">
@@ -217,20 +221,24 @@ export const Series: React.FC<SeriesProps> = ({ onViewScorecard }) => {
                           >
                             <Trophy size={14} /> Matches
                           </button>
-                          <button
-                            className="btn btn-sm btn-secondary"
-                            onClick={() => handleOpenEdit(s)}
-                            title="Edit Series"
-                          >
-                            <Edit2 size={14} />
-                          </button>
-                          <button
-                            className="btn btn-sm btn-danger"
-                            onClick={() => handleDeleteSeries(s.id)}
-                            title="Cancel Series"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          {canManageCricket && (
+                            <>
+                              <button
+                                className="btn btn-sm btn-secondary"
+                                onClick={() => handleOpenEdit(s)}
+                                title="Edit Series"
+                              >
+                                <Edit2 size={14} />
+                              </button>
+                              <button
+                                className="btn btn-sm btn-danger"
+                                onClick={() => handleDeleteSeries(s.id)}
+                                title="Cancel Series"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>

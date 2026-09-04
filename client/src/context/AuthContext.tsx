@@ -7,6 +7,12 @@ interface AuthContextType {
   token: string | null;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  isUmpire: boolean;
+  isUser: boolean;
+  canManageCricket: boolean;
+  canManageUsers: boolean;
+  hasRole: (role: string) => boolean;
+  hasAnyRole: (roles: string[]) => boolean;
   loading: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
@@ -54,7 +60,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('user');
   };
 
-  const isAdmin = user?.roles?.includes('Admin') ?? false;
+  const hasRole = (role: string): boolean => {
+    return user?.roles?.some((r) => r.toLowerCase() === role.toLowerCase()) ?? false;
+  };
+
+  const hasAnyRole = (roles: string[]): boolean => {
+    return roles.some((role) => hasRole(role));
+  };
+
+  const isAdmin = hasRole('Admin');
+  const isUmpire = hasRole('Umpire');
+  const isUser = hasRole('User') && !isAdmin && !isUmpire;
+  const canManageCricket = isAdmin || isUmpire;
+  const canManageUsers = isAdmin;
 
   return (
     <AuthContext.Provider
@@ -63,6 +81,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         token,
         isAuthenticated: !!token && !!user,
         isAdmin,
+        isUmpire,
+        isUser,
+        canManageCricket,
+        canManageUsers,
+        hasRole,
+        hasAnyRole,
         loading,
         login,
         logout,

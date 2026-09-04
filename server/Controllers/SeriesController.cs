@@ -101,7 +101,7 @@ public class SeriesController : ControllerBase
         });
     }
 
-    [Authorize(Roles = "Admin,User")]
+    [Authorize(Roles = "Admin,Umpire")]
     [HttpPost]
     public async Task<IActionResult> CreateSeries([FromBody] CreateSeriesRequest req)
     {
@@ -137,7 +137,7 @@ public class SeriesController : ControllerBase
         });
     }
 
-    [Authorize(Roles = "Admin,User")]
+    [Authorize(Roles = "Admin,Umpire")]
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateSeries(int id, [FromBody] UpdateSeriesRequest req)
     {
@@ -166,7 +166,7 @@ public class SeriesController : ControllerBase
         });
     }
 
-    [Authorize(Roles = "Admin,User")]
+    [Authorize(Roles = "Admin,Umpire")]
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteSeries(int id)
     {

@@ -40,7 +40,7 @@ export const Matches: React.FC<MatchesProps> = ({
   initialScorecardMatchId,
   onClearInitialMatchId,
 }) => {
-  const { isAdmin } = useAuth();
+  const { canManageCricket } = useAuth();
   const [matches, setMatches] = useState<Match[]>([]);
   const [seriesList, setSeriesList] = useState<Series[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -645,9 +645,11 @@ export const Matches: React.FC<MatchesProps> = ({
             <option value="Cancelled">Cancelled</option>
           </select>
 
-          <button className="btn btn-primary" onClick={handleOpenCreateMatch}>
-            <Plus size={16} /> Schedule Match
-          </button>
+          {canManageCricket && (
+            <button className="btn btn-primary" onClick={handleOpenCreateMatch}>
+              <Plus size={16} /> Schedule Match
+            </button>
+          )}
         </div>
       </div>
 
@@ -747,7 +749,7 @@ export const Matches: React.FC<MatchesProps> = ({
                   >
                     {m.status}
                   </span>
-                  {m.status?.toLowerCase() === 'scheduled' && (
+                  {canManageCricket && m.status?.toLowerCase() === 'scheduled' && (
                     <button
                       className="btn-icon-delete"
                       onClick={(e) => {
@@ -840,13 +842,15 @@ export const Matches: React.FC<MatchesProps> = ({
                 >
                   <FileText size={15} /> Match Scorecard
                 </button>
-                <button
-                  className="btn btn-sm btn-secondary"
-                  onClick={() => handleOpenEditMatch(m)}
-                  title="Edit Match"
-                >
-                  <Edit2 size={14} />
-                </button>
+                {canManageCricket && (
+                  <button
+                    className="btn btn-sm btn-secondary"
+                    onClick={() => handleOpenEditMatch(m)}
+                    title="Edit Match"
+                  >
+                    <Edit2 size={14} />
+                  </button>
+                )}
               </div>
             </div>
           ))
@@ -1087,15 +1091,34 @@ export const Matches: React.FC<MatchesProps> = ({
 
                 {/* State A: Innings Not Started -> Setup Wizard */}
                 {!isCurrentInningsStarted && !isCurrentInningsCompleted ? (
-                  <div
-                    style={{
-                      background: 'rgba(255,255,255,0.03)',
-                      border: '1px solid var(--border-color)',
-                      borderRadius: 'var(--radius-md)',
-                      padding: '1.5rem',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.25rem' }}>
+                  !canManageCricket ? (
+                    <div
+                      style={{
+                        background: 'rgba(255,255,255,0.02)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: 'var(--radius-md)',
+                        padding: '2.5rem 1.5rem',
+                        textAlign: 'center',
+                      }}
+                    >
+                      <Clock size={36} style={{ color: 'var(--text-muted)', margin: '0 auto 0.75rem' }} />
+                      <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: '0 0 0.5rem 0' }}>
+                        {activeInningsTab === 1 ? '1st' : '2nd'} Innings Not Started
+                      </h3>
+                      <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', maxWidth: '420px', margin: '0 auto' }}>
+                        The match umpire or administrator has not started this innings yet. Live score updates will appear here once live scoring commences.
+                      </p>
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        background: 'rgba(255,255,255,0.03)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: 'var(--radius-md)',
+                        padding: '1.5rem',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.25rem' }}>
                       <PlayCircle size={22} style={{ color: 'var(--accent-cricket)' }} />
                       <div>
                         <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>
@@ -1187,6 +1210,7 @@ export const Matches: React.FC<MatchesProps> = ({
                       <PlayCircle size={18} /> {actionLoading ? 'Starting...' : 'Start Live Scoring'}
                     </button>
                   </div>
+                  )
                 ) : isCurrentInningsCompleted ? (
                   /* State B: Innings Completed */
                   <div
@@ -1210,21 +1234,22 @@ export const Matches: React.FC<MatchesProps> = ({
                     </div>
 
                     {activeInningsTab === 1 && !activeLiveScore.innings2 ? (
-                      <button
-                        className="btn btn-primary"
-                        style={{ marginTop: '1rem' }}
-                        onClick={() => {
-                          setActiveInningsTab(2);
-                          setSetupInningsNumber(2);
-                          const secondTeam =
-                            activeLiveScore.match.team1Id === currentInnings?.battingTeamId
-                              ? activeLiveScore.match.team2Id
-                              : activeLiveScore.match.team1Id;
-                          setSetupBattingTeamId(secondTeam);
-                        }}
-                      >
-                        Proceed to 2nd Innings
-                      </button>
+                      canManageCricket && (
+                        <button
+                          className="btn btn-primary"
+                          onClick={() => {
+                            setActiveInningsTab(2);
+                            setSetupInningsNumber(2);
+                            const secondTeam =
+                              activeLiveScore.match.team1Id === currentInnings?.battingTeamId
+                                ? activeLiveScore.match.team2Id
+                                : activeLiveScore.match.team1Id;
+                            setSetupBattingTeamId(secondTeam);
+                          }}
+                        >
+                          Proceed to 2nd Innings
+                        </button>
+                      )
                     ) : (
                       activeLiveScore.matchSummary && (
                         <div style={{ fontSize: '1rem', color: '#f59e0b', fontWeight: 600, marginTop: '0.75rem' }}>
@@ -1305,16 +1330,18 @@ export const Matches: React.FC<MatchesProps> = ({
                       </div>
 
                       {/* Manual Strike Swap Button */}
-                      <button
-                        className="strike-swap-btn"
-                        title="Swap Striker & Non-Striker strike end"
-                        onClick={async () => {
-                          if (!currentInnings || !currentInnings.striker || !currentInnings.nonStriker) return;
-                          // Strike rotation visually swaps striker/non-striker on odd runs; button provides quick manual swap
-                        }}
-                      >
-                        <ArrowLeftRight size={16} />
-                      </button>
+                      {canManageCricket && (
+                        <button
+                          className="strike-swap-btn"
+                          title="Swap Striker & Non-Striker strike end"
+                          onClick={async () => {
+                            if (!currentInnings || !currentInnings.striker || !currentInnings.nonStriker) return;
+                            // Strike rotation visually swaps striker/non-striker on odd runs; button provides quick manual swap
+                          }}
+                        >
+                          <ArrowLeftRight size={16} />
+                        </button>
+                      )}
 
                       {/* Non-Striker Card */}
                       <div className="crease-card">
@@ -1369,16 +1396,22 @@ export const Matches: React.FC<MatchesProps> = ({
                             6 legal deliveries completed in this over by <strong>{currentInnings?.previousBowlerName || currentInnings?.currentBowler?.playerName}</strong>. Striker and non-striker ends swapped.
                           </div>
                         </div>
-                        <button
-                          className="btn btn-primary"
-                          onClick={() => {
-                            setNextBowlerId(0);
-                            setNextBowlerModalOpen(true);
-                          }}
-                          disabled={actionLoading}
-                        >
-                          Select Next Bowler
-                        </button>
+                        {canManageCricket ? (
+                          <button
+                            className="btn btn-primary"
+                            onClick={() => {
+                              setNextBowlerId(0);
+                              setNextBowlerModalOpen(true);
+                            }}
+                            disabled={actionLoading}
+                          >
+                            Select Next Bowler
+                          </button>
+                        ) : (
+                          <div style={{ fontSize: '0.85rem', color: '#f59e0b', fontWeight: 600, alignSelf: 'center' }}>
+                            Over complete — awaiting next bowler selection.
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -1487,162 +1520,186 @@ export const Matches: React.FC<MatchesProps> = ({
                       </div>
                     )}
 
-                    {/* Primary Ball Scoring Controls */}
-                    <div className="scoring-pad-wrapper">
-                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.5rem', textTransform: 'uppercase' }}>
-                        Live Delivery Result
-                      </div>
+                    {canManageCricket ? (
+                      <>
+                        {/* Primary Ball Scoring Controls */}
+                        <div className="scoring-pad-wrapper">
+                          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.5rem', textTransform: 'uppercase' }}>
+                            Live Delivery Result
+                          </div>
 
-                      {/* Runs Grid: 0 to 6 */}
-                      <div className="runs-pad-grid">
-                        {[0, 1, 2, 3, 4, 5, 6].map((run) => (
+                          {/* Runs Grid: 0 to 6 */}
+                          <div className="runs-pad-grid">
+                            {[0, 1, 2, 3, 4, 5, 6].map((run) => (
+                              <button
+                                key={run}
+                                className={`run-pad-btn ${run === 4 ? 'boundary-four' : run === 6 ? 'boundary-six' : ''}`}
+                                onClick={() => handleRecordNormalBall(run)}
+                                disabled={actionLoading || currentInnings?.isOverComplete || currentInnings?.requiresNewBatsman}
+                                title={`Record ${run} run${run === 1 ? '' : 's'}`}
+                              >
+                                {run}
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* Extra Actions Grid */}
+                          <div className="actions-pad-grid">
+                            <button
+                              className="action-pad-btn btn-wicket"
+                              onClick={handleOpenWicketDialog}
+                              disabled={actionLoading || currentInnings?.isOverComplete}
+                            >
+                              <Shield size={14} /> WICKET
+                            </button>
+
+                            <button
+                              className="action-pad-btn btn-noball"
+                              onClick={() => setExtraSubMenu(extraSubMenu === 'NoBall' ? null : 'NoBall')}
+                              disabled={actionLoading || currentInnings?.isOverComplete}
+                            >
+                              NO BALL
+                            </button>
+
+                            <button
+                              className="action-pad-btn btn-wide"
+                              onClick={() => setExtraSubMenu(extraSubMenu === 'Wide' ? null : 'Wide')}
+                              disabled={actionLoading || currentInnings?.isOverComplete}
+                            >
+                              WIDE
+                            </button>
+
+                            <button
+                              className="action-pad-btn btn-legbye"
+                              onClick={() => setExtraSubMenu(extraSubMenu === 'LegBye' ? null : 'LegBye')}
+                              disabled={actionLoading || currentInnings?.isOverComplete}
+                            >
+                              LEG BYE
+                            </button>
+
+                            <button
+                              className="action-pad-btn btn-deadball"
+                              onClick={handleRecordDeadBall}
+                              disabled={actionLoading || currentInnings?.isOverComplete}
+                            >
+                              DEAD BALL
+                            </button>
+                          </div>
+
+                          {/* Sub-menu options for No Ball */}
+                          {extraSubMenu === 'NoBall' && (
+                            <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '6px' }}>
+                              <div style={{ fontSize: '0.8rem', color: '#fbbf24', fontWeight: 600, marginBottom: '0.5rem' }}>
+                                No Ball: Select additional runs scored from the bat (Striker gets bat runs, +1 extra):
+                              </div>
+                              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                {[0, 1, 2, 3, 4, 6].map((batRun) => (
+                                  <button
+                                    key={batRun}
+                                    className="btn btn-sm btn-secondary"
+                                    onClick={() => handleRecordNoBall(batRun)}
+                                    disabled={actionLoading}
+                                  >
+                                    {batRun === 0 ? 'No Bat Run (1 nb)' : `+ ${batRun} ${batRun === 4 ? 'Four' : batRun === 6 ? 'Six' : 'Runs'}`}
+                                  </button>
+                                ))}
+                                <button
+                                  className="btn btn-sm btn-secondary"
+                                  onClick={() => setExtraSubMenu(null)}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Sub-menu options for Wide */}
+                          {extraSubMenu === 'Wide' && (
+                            <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '6px' }}>
+                              <div style={{ fontSize: '0.8rem', color: '#60a5fa', fontWeight: 600, marginBottom: '0.5rem' }}>
+                                Wide Delivery: Select total wide extras (Default is 1):
+                              </div>
+                              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                {[1, 2, 3, 4, 5].map((wRun) => (
+                                  <button
+                                    key={wRun}
+                                    className="btn btn-sm btn-secondary"
+                                    onClick={() => handleRecordWide(wRun)}
+                                    disabled={actionLoading}
+                                  >
+                                    {wRun === 1 ? '1 Wide' : `${wRun} Wides`}
+                                  </button>
+                                ))}
+                                <button
+                                  className="btn btn-sm btn-secondary"
+                                  onClick={() => setExtraSubMenu(null)}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Sub-menu options for Leg Bye */}
+                          {extraSubMenu === 'LegBye' && (
+                            <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: 'rgba(20,184,166,0.1)', border: '1px solid rgba(20,184,166,0.3)', borderRadius: '6px' }}>
+                              <div style={{ fontSize: '0.8rem', color: '#2dd4bf', fontWeight: 600, marginBottom: '0.5rem' }}>
+                                Leg Bye (Legal delivery, runs go to team extras):
+                              </div>
+                              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                {[1, 2, 3, 4].map((lbRun) => (
+                                  <button
+                                    key={lbRun}
+                                    className="btn btn-sm btn-secondary"
+                                    onClick={() => handleRecordLegBye(lbRun)}
+                                    disabled={actionLoading}
+                                  >
+                                    {lbRun} Leg Bye{lbRun > 1 ? 's' : ''}
+                                  </button>
+                                ))}
+                                <button
+                                  className="btn btn-sm btn-secondary"
+                                  onClick={() => setExtraSubMenu(null)}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* End Innings Link */}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                           <button
-                            key={run}
-                            className={`run-pad-btn ${run === 4 ? 'boundary-four' : run === 6 ? 'boundary-six' : ''}`}
-                            onClick={() => handleRecordNormalBall(run)}
-                            disabled={actionLoading || currentInnings?.isOverComplete || currentInnings?.requiresNewBatsman}
-                            title={`Record ${run} run${run === 1 ? '' : 's'}`}
+                            className="btn btn-sm btn-secondary"
+                            onClick={handleCompleteInnings}
+                            disabled={actionLoading}
                           >
-                            {run}
+                            Declare / Complete This Innings
                           </button>
-                        ))}
-                      </div>
-
-                      {/* Extra Actions Grid */}
-                      <div className="actions-pad-grid">
-                        <button
-                          className="action-pad-btn btn-wicket"
-                          onClick={handleOpenWicketDialog}
-                          disabled={actionLoading || currentInnings?.isOverComplete}
-                        >
-                          <Shield size={14} /> WICKET
-                        </button>
-
-                        <button
-                          className="action-pad-btn btn-noball"
-                          onClick={() => setExtraSubMenu(extraSubMenu === 'NoBall' ? null : 'NoBall')}
-                          disabled={actionLoading || currentInnings?.isOverComplete}
-                        >
-                          NO BALL
-                        </button>
-
-                        <button
-                          className="action-pad-btn btn-wide"
-                          onClick={() => setExtraSubMenu(extraSubMenu === 'Wide' ? null : 'Wide')}
-                          disabled={actionLoading || currentInnings?.isOverComplete}
-                        >
-                          WIDE
-                        </button>
-
-                        <button
-                          className="action-pad-btn btn-legbye"
-                          onClick={() => setExtraSubMenu(extraSubMenu === 'LegBye' ? null : 'LegBye')}
-                          disabled={actionLoading || currentInnings?.isOverComplete}
-                        >
-                          LEG BYE
-                        </button>
-
-                        <button
-                          className="action-pad-btn btn-deadball"
-                          onClick={handleRecordDeadBall}
-                          disabled={actionLoading || currentInnings?.isOverComplete}
-                        >
-                          DEAD BALL
-                        </button>
-                      </div>
-
-                      {/* Sub-menu options for No Ball */}
-                      {extraSubMenu === 'NoBall' && (
-                        <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '6px' }}>
-                          <div style={{ fontSize: '0.8rem', color: '#fbbf24', fontWeight: 600, marginBottom: '0.5rem' }}>
-                            No Ball: Select additional runs scored from the bat (Striker gets bat runs, +1 extra):
-                          </div>
-                          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                            {[0, 1, 2, 3, 4, 6].map((batRun) => (
-                              <button
-                                key={batRun}
-                                className="btn btn-sm btn-secondary"
-                                onClick={() => handleRecordNoBall(batRun)}
-                                disabled={actionLoading}
-                              >
-                                {batRun === 0 ? 'No Bat Run (1 nb)' : `+ ${batRun} ${batRun === 4 ? 'Four' : batRun === 6 ? 'Six' : 'Runs'}`}
-                              </button>
-                            ))}
-                            <button
-                              className="btn btn-sm btn-secondary"
-                              onClick={() => setExtraSubMenu(null)}
-                            >
-                              Cancel
-                            </button>
-                          </div>
                         </div>
-                      )}
-
-                      {/* Sub-menu options for Wide */}
-                      {extraSubMenu === 'Wide' && (
-                        <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '6px' }}>
-                          <div style={{ fontSize: '0.8rem', color: '#60a5fa', fontWeight: 600, marginBottom: '0.5rem' }}>
-                            Wide Delivery: Select total wide extras (Default is 1):
-                          </div>
-                          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                            {[1, 2, 3, 4, 5].map((wRun) => (
-                              <button
-                                key={wRun}
-                                className="btn btn-sm btn-secondary"
-                                onClick={() => handleRecordWide(wRun)}
-                                disabled={actionLoading}
-                              >
-                                {wRun === 1 ? '1 Wide' : `${wRun} Wides`}
-                              </button>
-                            ))}
-                            <button
-                              className="btn btn-sm btn-secondary"
-                              onClick={() => setExtraSubMenu(null)}
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Sub-menu options for Leg Bye */}
-                      {extraSubMenu === 'LegBye' && (
-                        <div style={{ marginTop: '0.75rem', padding: '0.75rem', background: 'rgba(20,184,166,0.1)', border: '1px solid rgba(20,184,166,0.3)', borderRadius: '6px' }}>
-                          <div style={{ fontSize: '0.8rem', color: '#2dd4bf', fontWeight: 600, marginBottom: '0.5rem' }}>
-                            Leg Bye (Legal delivery, runs go to team extras):
-                          </div>
-                          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                            {[1, 2, 3, 4].map((lbRun) => (
-                              <button
-                                key={lbRun}
-                                className="btn btn-sm btn-secondary"
-                                onClick={() => handleRecordLegBye(lbRun)}
-                                disabled={actionLoading}
-                              >
-                                {lbRun} Leg Bye{lbRun > 1 ? 's' : ''}
-                              </button>
-                            ))}
-                            <button
-                              className="btn btn-sm btn-secondary"
-                              onClick={() => setExtraSubMenu(null)}
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* End Innings Link */}
-                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                      <button
-                        className="btn btn-sm btn-secondary"
-                        onClick={handleCompleteInnings}
-                        disabled={actionLoading}
+                      </>
+                    ) : (
+                      <div
+                        style={{
+                          marginTop: '0.5rem',
+                          padding: '0.85rem 1.25rem',
+                          background: 'rgba(56, 189, 248, 0.08)',
+                          border: '1px solid rgba(56, 189, 248, 0.25)',
+                          borderRadius: '8px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '0.5rem',
+                          color: '#38bdf8',
+                          fontSize: '0.85rem',
+                          fontWeight: 600
+                        }}
                       >
-                        Declare / Complete This Innings
-                      </button>
-                    </div>
+                        <Activity size={16} />
+                        <span>Live Score Viewing Mode — Ball-by-ball scoring controls are restricted to Umpires and Administrators.</span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -2008,13 +2065,19 @@ export const Matches: React.FC<MatchesProps> = ({
                   </div>
                 </div>
 
-                <button
-                  className="btn btn-primary"
-                  onClick={handleSaveOutcome}
-                  disabled={actionLoading}
-                >
-                  <Save size={16} /> {actionLoading ? 'Saving...' : 'Save & Finalize Match Outcome'}
-                </button>
+                {canManageCricket ? (
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleSaveOutcome}
+                    disabled={actionLoading}
+                  >
+                    <Save size={16} /> {actionLoading ? 'Saving...' : 'Save & Finalize Match Outcome'}
+                  </button>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '0.85rem', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                    Match outcome can only be finalized by an Umpire or Administrator.
+                  </div>
+                )}
               </div>
             )}
           </div>

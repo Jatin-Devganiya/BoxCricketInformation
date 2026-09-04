@@ -8,9 +8,10 @@ import { Teams } from './pages/Teams';
 import { Series } from './pages/Series';
 import { Matches } from './pages/Matches';
 import { Users } from './pages/Users';
+import { AccessDenied } from './components/AccessDenied';
 
 const MainApp: React.FC = () => {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, canManageUsers } = useAuth();
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [scorecardMatchId, setScorecardMatchId] = useState<number | null>(null);
 
@@ -80,7 +81,13 @@ const MainApp: React.FC = () => {
           onClearInitialMatchId={() => setScorecardMatchId(null)}
         />
       )}
-      {activeTab === 'users' && <Users />}
+      {activeTab === 'users' && (
+        canManageUsers ? (
+          <Users />
+        ) : (
+          <AccessDenied onNavigateDashboard={() => setActiveTab('dashboard')} />
+        )
+      )}
     </Layout>
   );
 };

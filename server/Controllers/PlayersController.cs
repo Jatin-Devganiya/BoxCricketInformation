@@ -100,7 +100,7 @@ public class PlayersController : ControllerBase
         return Ok(stats);
     }
 
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,Umpire")]
     [HttpPost]
     public async Task<IActionResult> CreatePlayer([FromBody] CreatePlayerRequest req)
     {
@@ -146,7 +146,7 @@ public class PlayersController : ControllerBase
         });
     }
 
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,Umpire")]
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdatePlayer(int id, [FromBody] UpdatePlayerRequest req)
     {
@@ -194,7 +194,7 @@ public class PlayersController : ControllerBase
         });
     }
 
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Admin,Umpire")]
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeletePlayer(int id)
     {

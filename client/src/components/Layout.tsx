@@ -30,7 +30,7 @@ export const Layout: React.FC<LayoutProps> = ({
   pageSubtitle,
   actions,
 }) => {
-  const { user, isAdmin, logout } = useAuth();
+  const { user, canManageUsers, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const navItems = [
@@ -39,7 +39,7 @@ export const Layout: React.FC<LayoutProps> = ({
     { id: 'teams', label: 'Teams', icon: Shield },
     { id: 'series', label: 'Series', icon: Calendar },
     { id: 'matches', label: 'Matches', icon: Trophy },
-    ...(isAdmin ? [{ id: 'users', label: 'User Management', icon: UserCog }] : []),
+    ...(canManageUsers ? [{ id: 'users', label: 'User Management', icon: UserCog }] : []),
   ];
 
   const handleNavClick = (id: string) => {

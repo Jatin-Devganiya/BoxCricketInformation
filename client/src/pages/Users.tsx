@@ -170,7 +170,11 @@ export const Users: React.FC = () => {
                     <td>
                       <span
                         className={`badge ${
-                          u.roles?.includes('Admin') ? 'badge-warning' : 'badge-info'
+                          u.roles?.includes('Admin')
+                            ? 'badge-warning'
+                            : u.roles?.includes('Umpire')
+                            ? 'badge-primary'
+                            : 'badge-info'
                         }`}
                       >
                         <Shield size={12} style={{ marginRight: '3px' }} />
@@ -297,8 +301,9 @@ export const Users: React.FC = () => {
                 value={formData.role}
                 onChange={(e) => setFormData({ ...formData, role: e.target.value })}
               >
-                <option value="User">User (Manage Matches & Scorecards)</option>
-                <option value="Admin">Admin (Full System Access)</option>
+                <option value="Admin">Admin (Full System Access & User Management)</option>
+                <option value="Umpire">Umpire (Cricket Management & Live Scoring)</option>
+                <option value="User">User (View Only / Read-Only Access)</option>
               </select>
             </div>
 
