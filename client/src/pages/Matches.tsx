@@ -615,20 +615,6 @@ export const Matches: React.FC<MatchesProps> = ({
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
           <select
             className="form-select"
-            value={selectedSeriesId}
-            onChange={(e) => setSelectedSeriesId(Number(e.target.value))}
-            style={{ width: '220px' }}
-          >
-            <option value={0}>All Series / Tournaments</option>
-            {seriesList.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-
-          <select
-            className="form-select"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             style={{ width: '140px' }}
@@ -646,13 +632,34 @@ export const Matches: React.FC<MatchesProps> = ({
         </div>
       </div>
 
-      {/* Series Name Lists Bar */}
-      <div className="series-selection-bar">
-        <div className="series-selection-header">
-          <div className="series-selection-title">
-            <Layers size={18} style={{ color: 'var(--accent-cricket)' }} />
-            <span>Select Series / Tournament:</span>
+      {/* Series Selection Dropdown Bar */}
+      <div className="series-selection-bar" style={{ padding: '0.85rem 1.25rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <div className="series-selection-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}>
+              <Layers size={18} style={{ color: 'var(--accent-cricket)' }} />
+              <span>Select Series / Tournament:</span>
+            </div>
+
+            <select
+              className="form-select"
+              value={selectedSeriesId}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                setSelectedSeriesId(val);
+                setSortOrder('asc'); // Sort matches in ascending order when selecting a series
+              }}
+              style={{ minWidth: '260px', fontWeight: 500 }}
+            >
+              <option value={0}>All</option>
+              {seriesList.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} {s.totalMatches ? `(${s.totalMatches} Matches)` : ''}
+                </option>
+              ))}
+            </select>
           </div>
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <button
               className="btn btn-sm btn-secondary"
@@ -665,57 +672,6 @@ export const Matches: React.FC<MatchesProps> = ({
                 : 'Order: Descending (Match #N → #1)'}
             </button>
           </div>
-        </div>
-
-        <div className="series-chips-list">
-          {/* All Series Chip */}
-          <div
-            className={`series-chip-card ${selectedSeriesId === 0 ? 'active' : ''}`}
-            onClick={() => {
-              setSelectedSeriesId(0);
-              setSortOrder('asc');
-            }}
-          >
-            <div className="series-chip-name">All Tournaments & Series</div>
-            <div className="series-chip-meta">
-              <span>View all scheduled matches</span>
-              <span>{matches.length} Matches</span>
-            </div>
-          </div>
-
-          {/* Series Chips List */}
-          {seriesList.map((s) => {
-            const isSelected = selectedSeriesId === s.id;
-            return (
-              <div
-                key={s.id}
-                className={`series-chip-card ${isSelected ? 'active' : ''}`}
-                onClick={() => {
-                  setSelectedSeriesId(s.id);
-                  setSortOrder('asc'); // Clicking a series displays its matches in ascending order!
-                }}
-              >
-                <div className="series-chip-name" title={s.name}>
-                  {s.name}
-                </div>
-                <div className="series-chip-meta">
-                  <span>{new Date(s.startDate).toLocaleDateString()}</span>
-                  <span
-                    className={`badge ${
-                      s.status === 'Completed'
-                        ? 'badge-success'
-                        : s.status === 'InProgress'
-                        ? 'badge-warning'
-                        : 'badge-info'
-                    }`}
-                    style={{ padding: '0.1rem 0.45rem', fontSize: '0.7rem' }}
-                  >
-                    {s.totalMatches ? `${s.totalMatches} Matches` : s.status}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
         </div>
       </div>
 

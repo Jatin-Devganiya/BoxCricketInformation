@@ -30,6 +30,8 @@ export interface BattingStats {
   matches: number;
   innings: number;
   totalRuns: number;
+  ballsFaced: number;
+  totalBallsPlayed: number;
   highestScore: number;
   runRate: number; // Strike Rate
   fours: number;

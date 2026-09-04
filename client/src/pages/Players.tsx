@@ -438,6 +438,10 @@ export const Players: React.FC = () => {
                     <div style={{ fontSize: '0.75rem', color: '#10b981' }}>Total Runs</div>
                     <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#10b981' }}>{selectedStats.batting.totalRuns}</div>
                   </div>
+                  <div style={{ padding: '0.85rem', background: 'rgba(59,130,246,0.1)', borderRadius: '8px', textAlign: 'center', border: '1px solid rgba(59,130,246,0.2)' }}>
+                    <div style={{ fontSize: '0.75rem', color: '#60a5fa' }}>Total Balls Played</div>
+                    <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#60a5fa' }}>{selectedStats.batting.ballsFaced ?? selectedStats.batting.totalBallsPlayed ?? 0}</div>
+                  </div>
                   <div style={{ padding: '0.85rem', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', textAlign: 'center' }}>
                     <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Highest</div>
                     <div style={{ fontSize: '1.3rem', fontWeight: 700 }}>{selectedStats.batting.highestScore}</div>
@@ -455,6 +459,12 @@ export const Players: React.FC = () => {
                 <div className="table-container">
                   <table className="custom-table">
                     <tbody>
+                      <tr>
+                        <td>Total Balls Played</td>
+                        <td style={{ fontWeight: 600, color: '#60a5fa' }}>{selectedStats.batting.ballsFaced ?? selectedStats.batting.totalBallsPlayed ?? 0}</td>
+                        <td>Dismissals</td>
+                        <td style={{ fontWeight: 600 }}>{selectedStats.batting.dismissals}</td>
+                      </tr>
                       <tr>
                         <td>Fours (4s)</td>
                         <td style={{ fontWeight: 600 }}>{selectedStats.batting.fours}</td>

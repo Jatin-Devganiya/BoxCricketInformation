@@ -96,6 +96,8 @@ public class PlayerStatsService : IPlayerStatsService
                 Matches = battingMatches,
                 Innings = battingInnings,
                 TotalRuns = totalRuns,
+                BallsFaced = totalBallsFaced,
+                TotalBallsPlayed = totalBallsFaced,
                 HighestScore = highestScore,
                 RunRate = strikeRate,
                 Fours = fours,

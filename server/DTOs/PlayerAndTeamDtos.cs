@@ -55,6 +55,8 @@ public class BattingStatsDto
     public int Matches { get; set; }
     public int Innings { get; set; }
     public int TotalRuns { get; set; }
+    public int BallsFaced { get; set; }
+    public int TotalBallsPlayed { get; set; }
     public int HighestScore { get; set; }
     public double RunRate { get; set; } // Strike Rate
     public int Fours { get; set; }
