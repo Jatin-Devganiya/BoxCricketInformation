@@ -40,7 +40,7 @@ public class SeriesController : ControllerBase
                 EndDate = s.EndDate,
                 Status = s.Status,
                 Description = s.Description,
-                TotalMatches = s.Matches.Count,
+                TotalMatches = s.Matches.Count(m => m.Status != "Cancelled"),
                 CompletedMatches = s.Matches.Count(m => m.Status == "Completed")
             })
             .ToListAsync();

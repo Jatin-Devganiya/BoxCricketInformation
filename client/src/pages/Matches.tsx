@@ -26,7 +26,8 @@ import {
   ChevronRight,
   Shield,
   Activity,
-  BarChart2
+  BarChart2,
+  Trash2
 } from 'lucide-react';
 
 interface MatchesProps {
@@ -585,6 +586,18 @@ export const Matches: React.FC<MatchesProps> = ({
     }
   };
 
+  const handleDeleteMatch = async (matchId: number) => {
+    if (!window.confirm('Are you sure you want to delete this scheduled match? This will soft-delete the match.')) {
+      return;
+    }
+    try {
+      await matchesApi.delete(matchId);
+      await fetchMatches();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to delete match.');
+    }
+  };
+
   // Sort matches ascending or descending
   const sortedMatches = [...matches].sort((a, b) => {
     if (sortOrder === 'asc') {
@@ -715,19 +728,57 @@ export const Matches: React.FC<MatchesProps> = ({
                 <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent-cricket)' }}>
                   {m.seriesName} • Match #{m.matchOrder}
                 </span>
-                <span
-                  className={`badge ${
-                    m.status === 'Completed'
-                      ? 'badge-success'
-                      : m.status === 'InProgress'
-                      ? 'badge-warning'
-                      : m.status === 'Cancelled'
-                      ? 'badge-danger'
-                      : 'badge-info'
-                  }`}
-                >
-                  {m.status}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                  <span
+                    className={`badge ${
+                      m.status === 'Completed'
+                        ? 'badge-success'
+                        : m.status === 'InProgress'
+                        ? 'badge-warning'
+                        : m.status === 'Cancelled'
+                        ? 'badge-danger'
+                        : 'badge-info'
+                    }`}
+                  >
+                    {m.status}
+                  </span>
+                  {m.status?.toLowerCase() === 'scheduled' && (
+                    <button
+                      className="btn-icon-delete"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteMatch(m.id);
+                      }}
+                      title="Delete Scheduled Match (Soft Delete)"
+                      style={{
+                        background: 'rgba(239, 68, 68, 0.1)',
+                        border: '1px solid rgba(239, 68, 68, 0.25)',
+                        color: '#ef4444',
+                        borderRadius: '6px',
+                        width: '26px',
+                        height: '26px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        padding: 0,
+                        transition: 'all 0.2s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(239, 68, 68, 0.25)';
+                        e.currentTarget.style.borderColor = '#ef4444';
+                        e.currentTarget.style.transform = 'scale(1.08)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                        e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.25)';
+                        e.currentTarget.style.transform = 'scale(1)';
+                      }}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Teams Display */}

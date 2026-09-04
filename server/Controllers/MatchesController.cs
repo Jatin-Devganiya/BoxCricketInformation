@@ -43,6 +43,11 @@ public class MatchesController : ControllerBase
         {
             query = query.Where(m => m.Status.ToLower() == status.ToLower().Trim());
         }
+        else
+        {
+            // By default ("All Statuses"), exclude soft-deleted/cancelled matches
+            query = query.Where(m => m.Status != "Cancelled");
+        }
 
         if (date.HasValue)
         {
@@ -222,12 +227,17 @@ public class MatchesController : ControllerBase
         var match = await _context.Matches.FindAsync(id);
         if (match == null) return NotFound(new { message = "Match not found." });
 
+        if (!string.Equals(match.Status, "Scheduled", StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new { message = "Only matches with 'Scheduled' status can be deleted." });
+        }
+
         // Soft delete / cancel
         match.Status = "Cancelled";
         match.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
 
-        return Ok(new { message = "Match marked as cancelled." });
+        return Ok(new { message = "Match marked as cancelled (soft deleted)." });
     }
 
     [HttpGet("{id}/scorecard")]
