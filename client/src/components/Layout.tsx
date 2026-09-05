@@ -49,18 +49,29 @@ export const Layout: React.FC<LayoutProps> = ({
 
   return (
     <div className="app-container">
-      {/* Sidebar */}
-      <aside className={`sidebar ${mobileOpen ? 'open' : ''}`} style={mobileOpen ? { transform: 'translateX(0)' } : {}}>
+      {/* Sidebar Backdrop for screens below laptop (< 1024px) */}
+      {mobileOpen && (
+        <div
+          className="sidebar-backdrop"
+          onClick={() => setMobileOpen(false)}
+          title="Close Navigation Menu"
+        />
+      )}
+
+      {/* Sidebar - permanently visible on laptop (>= 1024px), off-canvas drawer below */}
+      <aside className={`sidebar ${mobileOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
           <div className="brand-icon">
             <Activity size={22} />
           </div>
           <div className="brand-title">CricketStats</div>
-          {mobileOpen && (
-            <button className="btn btn-sm btn-secondary" onClick={() => setMobileOpen(false)} style={{ marginLeft: 'auto' }}>
-              <X size={16} />
-            </button>
-          )}
+          <button
+            className="btn btn-sm btn-secondary sidebar-close-btn"
+            onClick={() => setMobileOpen(false)}
+            title="Close Sidebar"
+          >
+            <X size={16} />
+          </button>
         </div>
 
         <nav className="sidebar-nav">
@@ -110,9 +121,9 @@ export const Layout: React.FC<LayoutProps> = ({
         <header className="top-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <button
-              className="btn btn-sm btn-secondary md-hidden"
+              className="btn btn-sm btn-secondary sidebar-toggle-btn"
               onClick={() => setMobileOpen(!mobileOpen)}
-              style={{ display: window.innerWidth <= 768 ? 'inline-flex' : 'none' }}
+              title="Toggle Navigation Menu"
             >
               <Menu size={18} />
             </button>

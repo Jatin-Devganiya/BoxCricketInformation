@@ -14,7 +14,8 @@ import {
   LiveScore,
   StartInningsPayload,
   RecordBallPayload,
-  RecordWicketPayload
+  RecordWicketPayload,
+  EligibleBowlersResponse
 } from '../types';
 
 const api = axios.create({
@@ -226,6 +227,18 @@ export const liveScoringApi = {
   },
   completeMatch: async (matchId: number, payload: { winningTeamId?: number; result?: string; momPlayerId?: number }): Promise<LiveScore> => {
     const { data } = await api.post<LiveScore>(`/matches/${matchId}/complete`, payload);
+    return data;
+  },
+  getEligibleBowlers: async (matchId: number, inningsId: number): Promise<EligibleBowlersResponse> => {
+    const { data } = await api.get<EligibleBowlersResponse>(`/matches/${matchId}/innings/${inningsId}/eligible-bowlers`);
+    return data;
+  },
+  changeBowler: async (matchId: number, inningsId: number, newBowlerPlayerId: number): Promise<LiveScore> => {
+    const { data } = await api.post<LiveScore>(`/matches/${matchId}/innings/${inningsId}/change-bowler`, { newBowlerPlayerId });
+    return data;
+  },
+  replaceBowlerInOver: async (matchId: number, inningsId: number, newBowlerPlayerId: number): Promise<LiveScore> => {
+    const { data } = await api.post<LiveScore>(`/matches/${matchId}/innings/${inningsId}/replace-bowler-in-over`, { newBowlerPlayerId });
     return data;
   },
 };

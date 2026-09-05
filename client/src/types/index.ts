@@ -286,6 +286,41 @@ export interface BallEventItem {
   createdAt: string;
 }
 
+export interface ChasingStatus {
+  target: number;
+  currentRuns: number;
+  runsToWin: number;
+  totalLegalBalls: number;
+  legalBallsBowled: number;
+  ballsLeft: number;
+  displayText: string;
+  isTargetChased: boolean;
+  isTargetNotReached: boolean;
+  isActive: boolean;
+}
+
+export interface EligibleBowlerItem {
+  playerId: number;
+  playerName: string;
+  playerCategory: string;
+  legalBallsBowled: number;
+  oversDisplay: string;
+  runsConceded: number;
+  wickets: number;
+  isEligible: boolean;
+  ineligibilityReason?: string;
+}
+
+export interface EligibleBowlersResponse {
+  currentBowlerId: number;
+  currentBowlerName: string;
+  currentOverNumber: number;
+  legalBallsBowledInOver: number;
+  totalDeliveriesInOver: number;
+  isMidOver: boolean;
+  eligibleBowlers: EligibleBowlerItem[];
+}
+
 export interface LiveInnings {
   id: number;
   matchId: number;
@@ -306,6 +341,7 @@ export interface LiveInnings {
   currentRunRate: number;
   targetRuns?: number;
   requiredRunRate?: number;
+  chasingStatus?: ChasingStatus | null;
   striker?: LiveBatsman;
   nonStriker?: LiveBatsman;
   currentBowler?: LiveBowler;
@@ -314,6 +350,10 @@ export interface LiveInnings {
   isOverComplete: boolean;
   requiresNewBatsman: boolean;
   lastDismissedPlayerId?: number;
+  canChangeBowlerPreOver?: boolean;
+  canReplaceBowlerMidOver?: boolean;
+  currentOverLegalBalls?: number;
+  currentOverDeliveriesCount?: number;
   currentOverDeliveries: BallEventItem[];
   allDeliveries?: BallEventItem[];
   battingPerformances: BattingRecord[];
@@ -329,6 +369,7 @@ export interface LiveScore {
   isInningsComplete: boolean;
   isMatchComplete: boolean;
   matchSummary?: string;
+  chasingStatus?: ChasingStatus | null;
   momDetails?: MomCalculationResult | null;
   calculatedResult?: MatchResultCalculationResult | null;
 }

@@ -779,13 +779,121 @@ body {
   gap: 0.5rem;
 }
 
-/* Responsive adjustments */
-@media (max-width: 768px) {
+/* =========================================================
+   RESPONSIVE DESIGN BREAKPOINTS FOR SIDEBAR NAVIGATION:
+   - Laptop screen and larger (>= 1024px): Left panel permanently visible.
+   - Smaller than laptop (< 1024px: Tablets & Mobiles):
+     Left panel hidden off-canvas, toggled via hamburger menu with backdrop.
+   ========================================================= */
+
+/* Sidebar Toggle button on header (shown only when screen is smaller than laptop: < 1024px) */
+.sidebar-toggle-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0.45rem 0.65rem;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sidebar-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: var(--accent-cricket);
+}
+
+/* Sidebar Close button inside sidebar header */
+.sidebar-close-btn {
+  display: none;
+  margin-left: auto;
+  padding: 0.35rem 0.5rem;
+}
+
+/* Sidebar Backdrop overlay on mobile / tablet */
+.sidebar-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(4, 10, 20, 0.7);
+  backdrop-filter: blur(4px);
+  z-index: 95;
+  animation: fadeInBackdrop 0.25s ease;
+}
+
+@keyframes fadeInBackdrop {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Below Laptop Screen (< 1024px): Hide left panel off-canvas */
+@media (max-width: 1023px) {
+  .sidebar-toggle-btn {
+    display: inline-flex;
+  }
+
+  .sidebar-close-btn {
+    display: inline-flex;
+  }
+
   .sidebar {
     transform: translateX(-100%);
+    box-shadow: 0 0 35px rgba(0, 0, 0, 0.6);
+    z-index: 100;
   }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
   .main-wrapper {
     margin-left: 0;
+    width: 100%;
+  }
+
+  .top-header {
+    padding: 0 1.25rem;
+  }
+
+  .content-body {
+    padding: 1.25rem;
+  }
+}
+
+/* Mobile Screens (< 768px): Optimize headers & compact layout */
+@media (max-width: 768px) {
+  .top-header {
+    height: auto;
+    padding: 0.75rem 1rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .header-actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .page-title-wrap h1 {
+    font-size: 1.15rem;
+  }
+
+  .series-selection-bar {
+    padding: 0.75rem 1rem;
+  }
+
+  .series-selection-bar select {
+    min-width: 100% !important;
   }
 }
 

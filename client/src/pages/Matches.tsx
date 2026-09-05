@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { matchesApi, seriesApi, teamsApi, liveScoringApi } from '../api/client';
-import { Match, Series, Team, Player, LiveScore, LiveInnings } from '../types';
+import { Match, Series, Team, Player, LiveScore, LiveInnings, EligibleBowlersResponse } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { Modal } from '../components/Modal';
 import {
@@ -28,7 +28,8 @@ import {
   Activity,
   BarChart2,
   Trash2,
-  Lock
+  Lock,
+  XCircle
 } from 'lucide-react';
 
 interface MatchesProps {
@@ -104,6 +105,13 @@ export const Matches: React.FC<MatchesProps> = ({
   // Next Bowler State
   const [nextBowlerModalOpen, setNextBowlerModalOpen] = useState<boolean>(false);
   const [nextBowlerId, setNextBowlerId] = useState<number>(0);
+
+  // Bowler Change States (Scenario A: Pre-over, Scenario B: Incomplete mid-over)
+  const [changeBowlerModalOpen, setChangeBowlerModalOpen] = useState<boolean>(false);
+  const [isMidOverChange, setIsMidOverChange] = useState<boolean>(false);
+  const [selectedNewBowlerId, setSelectedNewBowlerId] = useState<number>(0);
+  const [eligibleBowlersData, setEligibleBowlersData] = useState<EligibleBowlersResponse | null>(null);
+  const [bowlerLoading, setBowlerLoading] = useState<boolean>(false);
 
   // Extra Delivery Sub-selector: 'NoBall' | 'Wide' | 'LegBye' | null
   const [extraSubMenu, setExtraSubMenu] = useState<'NoBall' | 'Wide' | 'LegBye' | null>(null);
@@ -280,6 +288,138 @@ export const Matches: React.FC<MatchesProps> = ({
   // ==========================================
   // LIVE SCORING HANDLERS
   // ==========================================
+
+  const formatMatchResult = (result?: string, team1Name?: string, team2Name?: string) => {
+    if (!result) return '';
+    let formatted = result;
+    if (formatted.startsWith('Team 1 ') && team1Name) {
+      formatted = team1Name + formatted.slice('Team 1'.length);
+    } else if (formatted.startsWith('Team 2 ') && team2Name) {
+      formatted = team2Name + formatted.slice('Team 2'.length);
+    }
+    return formatted;
+  };
+
+  const getInningsOutcomeBadge = (
+    innings: LiveInnings | undefined,
+    liveScore: LiveScore | null
+  ): { text: string; isWinner: boolean | null; color: string; bg: string; border: string } | null => {
+    if (!innings || !liveScore) return null;
+
+    const inn1 = liveScore.innings1;
+    const inn2 = liveScore.innings2;
+    const calc = liveScore.calculatedResult;
+    const match = liveScore.match;
+
+    const isTargetChased = Boolean(
+      (inn2 && inn1 && inn2.runs > inn1.runs) ||
+      inn2?.chasingStatus?.isTargetChased ||
+      liveScore.chasingStatus?.isTargetChased
+    );
+
+    const isMatchComplete = Boolean(
+      liveScore.isMatchComplete ||
+      calc?.isComplete ||
+      match?.status === 'Completed' ||
+      isTargetChased
+    );
+
+    if (!isMatchComplete) {
+      return null;
+    }
+
+    const currentTeamId = innings.battingTeamId;
+
+    // Determine winning team ID
+    let winningTeamId: number | null = calc?.winningTeamId ?? match?.winningTeamId ?? null;
+    if (winningTeamId == null) {
+      if (isTargetChased && inn2) {
+        winningTeamId = inn2.battingTeamId;
+      } else if (inn1 && inn2 && inn1.runs > inn2.runs) {
+        winningTeamId = inn1.battingTeamId;
+      }
+    }
+
+    // Determine result type: 'runs' | 'wickets' | 'tie' | 'abandoned' | 'cancelled'
+    let resultType = (calc?.resultType ?? match?.resultType ?? '').toLowerCase();
+    if (!resultType || resultType === 'pending') {
+      if (isTargetChased) {
+        resultType = 'wickets';
+      } else if (inn1 && inn2 && inn1.runs > inn2.runs) {
+        resultType = 'runs';
+      } else if (inn1 && inn2 && inn1.runs === inn2.runs) {
+        resultType = 'tie';
+      }
+    }
+
+    // Tie
+    if (resultType === 'tie' || (inn1 && inn2 && inn1.runs === inn2.runs && winningTeamId == null)) {
+      return {
+        text: 'Match Tied',
+        isWinner: null,
+        color: '#f59e0b',
+        bg: 'rgba(245, 158, 11, 0.12)',
+        border: 'rgba(245, 158, 11, 0.35)',
+      };
+    }
+
+    // Abandoned / Cancelled
+    if (resultType === 'abandoned' || match?.status === 'Abandoned') {
+      return {
+        text: 'Match Abandoned',
+        isWinner: null,
+        color: '#9ca3af',
+        bg: 'rgba(156, 163, 175, 0.12)',
+        border: 'rgba(156, 163, 175, 0.35)',
+      };
+    }
+    if (resultType === 'cancelled' || match?.status === 'Cancelled') {
+      return {
+        text: 'Match Cancelled',
+        isWinner: null,
+        color: '#9ca3af',
+        bg: 'rgba(156, 163, 175, 0.12)',
+        border: 'rgba(156, 163, 175, 0.35)',
+      };
+    }
+
+    // Winning margin
+    let margin: number | null = calc?.winningMargin ?? match?.winningMargin ?? null;
+    if (margin == null || margin <= 0) {
+      if (resultType === 'wickets' && inn2) {
+        margin = Math.max(0, 10 - inn2.wickets);
+      } else if (resultType === 'runs' && inn1 && inn2) {
+        margin = Math.max(0, inn1.runs - inn2.runs);
+      }
+    }
+
+    const isWinner = winningTeamId != null && currentTeamId === winningTeamId;
+
+    let marginDetail = '';
+    if (resultType === 'runs' && margin != null && margin > 0) {
+      marginDetail = `${margin} ${margin === 1 ? 'run' : 'runs'}`;
+    } else if (resultType === 'wickets' && margin != null && margin > 0) {
+      marginDetail = `${margin} ${margin === 1 ? 'wicket' : 'wickets'}`;
+    }
+
+    if (isWinner) {
+      return {
+        text: marginDetail ? `Won by ${marginDetail}` : 'Won the match',
+        isWinner: true,
+        color: '#10b981',
+        bg: 'rgba(16, 185, 129, 0.12)',
+        border: 'rgba(16, 185, 129, 0.35)',
+      };
+    } else {
+      return {
+        text: marginDetail ? `Lost by ${marginDetail}` : 'Lost the match',
+        isWinner: false,
+        color: '#ef4444',
+        bg: 'rgba(239, 68, 68, 0.12)',
+        border: 'rgba(239, 68, 68, 0.35)',
+      };
+    }
+  };
 
   const currentInnings: LiveInnings | undefined =
     activeInningsTab === 1 ? activeLiveScore?.innings1 : activeLiveScore?.innings2;
@@ -537,6 +677,48 @@ export const Matches: React.FC<MatchesProps> = ({
       fetchMatches();
     } catch (err: any) {
       setScorecardError(err.response?.data?.message || 'Failed to advance to next over.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleOpenChangeBowler = async (isMidOver: boolean) => {
+    if (!activeLiveScore || !currentInnings) return;
+    try {
+      setBowlerLoading(true);
+      setScorecardError(null);
+      setIsMidOverChange(isMidOver);
+      setSelectedNewBowlerId(0);
+      const data = await liveScoringApi.getEligibleBowlers(activeLiveScore.match.id, currentInnings.id);
+      setEligibleBowlersData(data);
+      setChangeBowlerModalOpen(true);
+    } catch (err: any) {
+      setScorecardError(err.response?.data?.message || 'Failed to fetch eligible bowlers.');
+    } finally {
+      setBowlerLoading(false);
+    }
+  };
+
+  const handleConfirmChangeBowler = async () => {
+    if (!activeLiveScore || !currentInnings || selectedNewBowlerId === 0 || actionLoading) {
+      setScorecardError('Please select an eligible bowler.');
+      return;
+    }
+    try {
+      setActionLoading(true);
+      setScorecardError(null);
+      let updated: LiveScore;
+      if (isMidOverChange) {
+        updated = await liveScoringApi.replaceBowlerInOver(activeLiveScore.match.id, currentInnings.id, selectedNewBowlerId);
+      } else {
+        updated = await liveScoringApi.changeBowler(activeLiveScore.match.id, currentInnings.id, selectedNewBowlerId);
+      }
+      setActiveLiveScore(updated);
+      setChangeBowlerModalOpen(false);
+      setSelectedNewBowlerId(0);
+      fetchMatches();
+    } catch (err: any) {
+      setScorecardError(err.response?.data?.message || 'Failed to change bowler.');
     } finally {
       setActionLoading(false);
     }
@@ -822,13 +1004,13 @@ export const Matches: React.FC<MatchesProps> = ({
                 {m.result && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#10b981', fontWeight: 600, marginTop: '0.2rem' }}>
                     <CheckCircle size={14} />
-                    <span>{m.result}</span>
+                    <span>{formatMatchResult(m.result, m.team1Name, m.team2Name)}</span>
                   </div>
                 )}
                 {m.momPlayerName && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#f59e0b', fontSize: '0.75rem' }}>
-                    <UserCheck size={14} />
-                    <span>Player of the Match: {m.momPlayerName}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#f59e0b', fontSize: '0.8rem', fontWeight: 600, marginTop: '0.2rem' }}>
+                    <Trophy size={14} style={{ color: '#f59e0b' }} />
+                    <span>Man of the Match: <strong style={{ color: '#fbbf24' }}>{m.momPlayerName}</strong></span>
                   </div>
                 )}
               </div>
@@ -1233,30 +1415,84 @@ export const Matches: React.FC<MatchesProps> = ({
                       </span>
                     </div>
 
-                    {activeInningsTab === 1 && !activeLiveScore.innings2 ? (
-                      canScoreLive && (
-                        <button
-                          className="btn btn-primary"
-                          onClick={() => {
-                            setActiveInningsTab(2);
-                            setSetupInningsNumber(2);
-                            const secondTeam =
-                              activeLiveScore.match.team1Id === currentInnings?.battingTeamId
-                                ? activeLiveScore.match.team2Id
-                                : activeLiveScore.match.team1Id;
-                            setSetupBattingTeamId(secondTeam);
-                          }}
-                        >
-                          Proceed to 2nd Innings
-                        </button>
-                      )
-                    ) : (
-                      activeLiveScore.matchSummary && (
-                        <div style={{ fontSize: '1rem', color: '#f59e0b', fontWeight: 600, marginTop: '0.75rem' }}>
-                          {activeLiveScore.matchSummary}
+                    {(() => {
+                      if (activeInningsTab === 1 && !activeLiveScore.innings2) {
+                        return canScoreLive ? (
+                          <button
+                            className="btn btn-primary"
+                            onClick={() => {
+                              setActiveInningsTab(2);
+                              setSetupInningsNumber(2);
+                              const secondTeam =
+                                activeLiveScore.match.team1Id === currentInnings?.battingTeamId
+                                  ? activeLiveScore.match.team2Id
+                                  : activeLiveScore.match.team1Id;
+                              setSetupBattingTeamId(secondTeam);
+                            }}
+                          >
+                            Proceed to 2nd Innings
+                          </button>
+                        ) : null;
+                      }
+
+                      const outcomeBadge = getInningsOutcomeBadge(currentInnings, activeLiveScore);
+                      const momName =
+                        activeLiveScore.match.momPlayerName ||
+                        activeLiveScore.momDetails?.selectedPlayerName;
+
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.65rem' }}>
+                          {outcomeBadge ? (
+                            <div
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '0.5rem',
+                                fontSize: '1.05rem',
+                                color: outcomeBadge.color,
+                                background: outcomeBadge.bg,
+                                border: `1px solid ${outcomeBadge.border}`,
+                                padding: '0.45rem 1.25rem',
+                                borderRadius: '24px',
+                                fontWeight: 700,
+                                marginTop: '0.75rem',
+                                letterSpacing: '0.2px',
+                              }}
+                            >
+                              {outcomeBadge.isWinner === true && <CheckCircle size={18} />}
+                              {outcomeBadge.isWinner === false && <XCircle size={18} />}
+                              <span>{outcomeBadge.text}</span>
+                            </div>
+                          ) : activeLiveScore.matchSummary ? (
+                            <div style={{ fontSize: '1rem', color: '#f59e0b', fontWeight: 600, marginTop: '0.75rem' }}>
+                              {activeLiveScore.matchSummary}
+                            </div>
+                          ) : null}
+
+                          {momName && (
+                            <div
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '0.45rem',
+                                fontSize: '0.95rem',
+                                color: '#f59e0b',
+                                background: 'rgba(245, 158, 11, 0.12)',
+                                border: '1px solid rgba(245, 158, 11, 0.3)',
+                                padding: '0.4rem 1.15rem',
+                                borderRadius: '20px',
+                                fontWeight: 600,
+                              }}
+                            >
+                              <Trophy size={16} style={{ color: '#f59e0b' }} />
+                              <span>Man of the Match: <strong style={{ color: '#fbbf24' }}>{momName}</strong></span>
+                            </div>
+                          )}
                         </div>
-                      )
-                    )}
+                      );
+                    })()}
                   </div>
                 ) : (
                   /* State C: Active In-Progress Live Scoring */
@@ -1304,6 +1540,43 @@ export const Matches: React.FC<MatchesProps> = ({
                         <span>•</span>
                         <span>Extras: {currentInnings?.extras || 0}</span>
                       </div>
+
+                      {/* Live Chasing Status Message (Second Innings Target Chase) */}
+                      {currentInnings?.inningsNumber === 2 && currentInnings?.chasingStatus && (
+                        <div
+                          style={{
+                            marginTop: '0.85rem',
+                            padding: '0.65rem 1.25rem',
+                            borderRadius: '8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '0.5rem',
+                            fontWeight: 700,
+                            fontSize: '1rem',
+                            letterSpacing: '0.2px',
+                            background: currentInnings.chasingStatus.isTargetChased
+                              ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(5, 150, 105, 0.35))'
+                              : currentInnings.chasingStatus.isTargetNotReached
+                              ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.25), rgba(185, 28, 28, 0.35))'
+                              : 'linear-gradient(135deg, rgba(245, 158, 11, 0.18), rgba(217, 119, 6, 0.25))',
+                            border: currentInnings.chasingStatus.isTargetChased
+                              ? '1px solid rgba(16, 185, 129, 0.5)'
+                              : currentInnings.chasingStatus.isTargetNotReached
+                              ? '1px solid rgba(239, 68, 68, 0.5)'
+                              : '1px solid rgba(245, 158, 11, 0.4)',
+                            color: currentInnings.chasingStatus.isTargetChased
+                              ? '#34d399'
+                              : currentInnings.chasingStatus.isTargetNotReached
+                              ? '#f87171'
+                              : '#fbbf24',
+                            boxShadow: '0 4px 16px rgba(0,0,0,0.2)'
+                          }}
+                        >
+                          <span>🔥</span>
+                          <span>{currentInnings.chasingStatus.displayText}</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Crease Widget: Striker, Non-Striker, Bowler */}
@@ -1382,6 +1655,17 @@ export const Matches: React.FC<MatchesProps> = ({
                           <span>Wd: <strong>{currentInnings?.currentBowler?.wides ?? 0}</strong></span>
                           <span>Nb: <strong>{currentInnings?.currentBowler?.noBalls ?? 0}</strong></span>
                         </div>
+                        {canScoreLive && currentInnings?.canChangeBowlerPreOver && (
+                          <button
+                            className="btn btn-sm btn-secondary"
+                            style={{ marginTop: '0.6rem', width: '100%', fontSize: '0.75rem', padding: '0.3rem 0.5rem' }}
+                            onClick={() => handleOpenChangeBowler(false)}
+                            disabled={actionLoading}
+                            title="Change bowler before delivering any ball in this over"
+                          >
+                            <RotateCw size={12} style={{ marginRight: '4px' }} /> Change Bowler
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -1422,9 +1706,30 @@ export const Matches: React.FC<MatchesProps> = ({
                           Over {currentInnings?.currentOverNumber ?? 1} Deliveries (
                           {currentInnings?.currentOverDeliveries?.filter((b) => b.isLegalBall).length || 0}/6 legal balls)
                         </span>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                          Bowler: <strong style={{ color: 'var(--text-primary)' }}>{currentInnings?.currentBowler?.playerName || 'Unassigned'}</strong> • Balls in Over: {currentInnings?.currentOverDeliveries?.length || 0}
-                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                            Bowler: <strong style={{ color: 'var(--text-primary)' }}>{currentInnings?.currentBowler?.playerName || 'Unassigned'}</strong> • Balls in Over: {currentInnings?.currentOverDeliveries?.length || 0}
+                          </span>
+                          {canScoreLive && currentInnings?.canReplaceBowlerMidOver && (
+                            <button
+                              className="btn btn-sm btn-secondary"
+                              style={{
+                                fontSize: '0.72rem',
+                                padding: '0.2rem 0.55rem',
+                                borderColor: 'var(--accent-cricket)',
+                                color: 'var(--accent-cricket)',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px'
+                              }}
+                              onClick={() => handleOpenChangeBowler(true)}
+                              disabled={actionLoading}
+                              title="Complete this in-progress over with another eligible bowler"
+                            >
+                              <RotateCw size={11} /> Complete Over With Another Bowler
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <div className="over-pills-row">
                         {!currentInnings?.currentOverDeliveries || currentInnings.currentOverDeliveries.length === 0 ? (
@@ -1453,6 +1758,14 @@ export const Matches: React.FC<MatchesProps> = ({
                           })
                         )}
                       </div>
+                      {currentInnings?.currentOverDeliveries && Array.from(new Set(currentInnings.currentOverDeliveries.map(d => d.bowlerName))).length > 1 && (
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.45rem', padding: '0.25rem 0.5rem', background: 'rgba(255,255,255,0.03)', borderRadius: '4px' }}>
+                          Over shared by: {Array.from(new Set(currentInnings.currentOverDeliveries.map(d => d.bowlerName))).map((bName) => {
+                            const count = currentInnings.currentOverDeliveries.filter(d => d.bowlerName === bName && d.isLegalBall).length;
+                            return `${bName} (${count} legal ball${count === 1 ? '' : 's'})`;
+                          }).join(' • ')}
+                        </div>
+                      )}
                     </div>
 
                     {/* Previous Completed Overs History */}
@@ -1521,9 +1834,28 @@ export const Matches: React.FC<MatchesProps> = ({
                     )}
 
                     {canScoreLive ? (
-                      <>
-                        {/* Primary Ball Scoring Controls */}
-                        <div className="scoring-pad-wrapper">
+                      currentInnings?.status === 'Completed' || activeLiveScore?.isMatchComplete || currentInnings?.chasingStatus?.isTargetChased ? (
+                        <div
+                          style={{
+                            padding: '1.25rem',
+                            borderRadius: '8px',
+                            background: 'rgba(16, 185, 129, 0.08)',
+                            border: '1px solid rgba(16, 185, 129, 0.3)',
+                            textAlign: 'center',
+                            marginTop: '1rem',
+                          }}
+                        >
+                          <div style={{ fontWeight: 700, fontSize: '1.05rem', color: '#34d399', marginBottom: '0.35rem' }}>
+                            {currentInnings?.chasingStatus?.isTargetChased ? '🎉 Target Chased — Chasing Team Has Won!' : 'Innings / Match Finished'}
+                          </div>
+                          <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                            Scoring is locked for this completed innings. Review final outcomes and player statistics in the tabs above.
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Primary Ball Scoring Controls */}
+                          <div className="scoring-pad-wrapper">
                           <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '0.5rem', textTransform: 'uppercase' }}>
                             Live Delivery Result
                           </div>
@@ -1679,7 +2011,8 @@ export const Matches: React.FC<MatchesProps> = ({
                           </button>
                         </div>
                       </>
-                    ) : (
+                    )
+                  ) : (
                       <div
                         style={{
                           marginTop: '0.5rem',
@@ -2270,6 +2603,117 @@ export const Matches: React.FC<MatchesProps> = ({
                 ))}
             </select>
           </div>
+        </div>
+      </Modal>
+
+      {/* Change / Replace Bowler Modal (Scenario A & Scenario B) */}
+      <Modal
+        isOpen={changeBowlerModalOpen}
+        onClose={() => setChangeBowlerModalOpen(false)}
+        title={isMidOverChange ? 'Complete In-Progress Over With Another Bowler' : 'Change Current Bowler'}
+        size="md"
+        footer={
+          <div style={{ display: 'flex', gap: '0.75rem', width: '100%', justifyContent: 'flex-end' }}>
+            <button className="btn btn-secondary" onClick={() => setChangeBowlerModalOpen(false)}>
+              Cancel
+            </button>
+            <button
+              className="btn btn-primary"
+              onClick={handleConfirmChangeBowler}
+              disabled={actionLoading || selectedNewBowlerId === 0}
+            >
+              {isMidOverChange ? 'Continue Over With New Bowler' : 'Confirm Bowler'}
+            </button>
+          </div>
+        }
+      >
+        <div style={{ padding: '0.5rem 0' }}>
+          {bowlerLoading ? (
+            <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)' }}>
+              Checking bowler eligibility...
+            </div>
+          ) : (
+            <>
+              {isMidOverChange ? (
+                <div
+                  style={{
+                    marginBottom: '1rem',
+                    padding: '0.75rem 1rem',
+                    background: 'rgba(59, 130, 246, 0.08)',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(59, 130, 246, 0.25)',
+                  }}
+                >
+                  <div style={{ fontSize: '0.75rem', color: '#60a5fa', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>
+                    In-Progress Over: Over {eligibleBowlersData?.currentOverNumber || currentInnings?.currentOverNumber || 1}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <div>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Current Bowler: </span>
+                      <strong style={{ color: 'var(--text-primary)' }}>{eligibleBowlersData?.currentBowlerName || currentInnings?.currentBowler?.playerName}</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Completed in Over: </span>
+                      <strong style={{ color: '#34d399' }}>{eligibleBowlersData?.legalBallsBowledInOver || 0}/6 legal balls</strong>
+                    </div>
+                    <div>
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Remaining: </span>
+                      <strong style={{ color: '#fbbf24' }}>{6 - (eligibleBowlersData?.legalBallsBowledInOver || 0)} balls</strong>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '0.4rem' }}>
+                    The replacement bowler will finish the remaining balls of this over. Previous deliveries and bowling figures remain with the original bowler.
+                  </div>
+                </div>
+              ) : (
+                <div
+                  style={{
+                    marginBottom: '1rem',
+                    padding: '0.75rem 1rem',
+                    background: 'rgba(255, 255, 255, 0.04)',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-color)',
+                  }}
+                >
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>
+                    Pre-Over Bowler Update
+                  </div>
+                  <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.35rem' }}>
+                    Currently selected bowler: <strong style={{ color: 'var(--accent-cricket)' }}>{eligibleBowlersData?.currentBowlerName || currentInnings?.currentBowler?.playerName}</strong>
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                    No balls have been delivered in this over yet (0 balls, 0 legal deliveries, 0 runs).
+                  </div>
+                </div>
+              )}
+
+              <div className="form-group">
+                <label className="form-label">
+                  Select {isMidOverChange ? 'Replacement' : 'New'} Bowler *
+                </label>
+                <select
+                  className="form-select"
+                  value={selectedNewBowlerId}
+                  onChange={(e) => setSelectedNewBowlerId(Number(e.target.value))}
+                >
+                  <option value={0}>-- Select Eligible Bowler --</option>
+                  {eligibleBowlersData?.eligibleBowlers
+                    ?.filter((b) => b.isEligible)
+                    .map((b) => (
+                      <option key={b.playerId} value={b.playerId}>
+                        {b.playerName} ({b.playerCategory}) • {b.oversDisplay} ov, {b.runsConceded}R, {b.wickets}W
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {eligibleBowlersData?.eligibleBowlers?.some((b) => !b.isEligible) && (
+                <div style={{ marginTop: '0.75rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  Ineligible: {eligibleBowlersData.eligibleBowlers.filter(b => !b.isEligible).map(b => `${b.playerName} (${b.ineligibilityReason})`).join(', ')}
+                </div>
+              )}
+            </>
+          )}
         </div>
       </Modal>
 

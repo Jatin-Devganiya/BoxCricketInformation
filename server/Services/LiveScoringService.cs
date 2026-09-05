@@ -15,6 +15,9 @@ public interface ILiveScoringService
     Task<LiveScoreDto?> NextOverAsync(int matchId, int inningsId, NextOverRequest request);
     Task<LiveScoreDto?> CompleteInningsAsync(int matchId, int inningsId);
     Task<LiveScoreDto?> CompleteMatchAsync(int matchId, CompleteMatchRequest request);
+    Task<EligibleBowlersResponseDto?> GetEligibleBowlersAsync(int matchId, int inningsId);
+    Task<LiveScoreDto?> ChangeSelectedBowlerAsync(int matchId, int inningsId, ChangeBowlerRequest request);
+    Task<LiveScoreDto?> ReplaceBowlerForRemainingOverAsync(int matchId, int inningsId, ReplaceBowlerRequest request);
 }
 
 public class LiveScoringService : ILiveScoringService
@@ -137,6 +140,12 @@ public class LiveScoringService : ILiveScoringService
         var inn1Dto = inn1 != null ? BuildLiveInningsDto(match, inn1, inn1Events, null, playersLookup) : null;
         var inn2Dto = inn2 != null ? BuildLiveInningsDto(match, inn2, inn2Events, inn1?.Runs, playersLookup) : null;
 
+        var chasingStatus = GenerateChasingStatus(match, inn2, inn1);
+        if (inn2Dto != null)
+        {
+            inn2Dto.ChasingStatus = chasingStatus;
+        }
+
         int activeInningsNumber = 1;
         if (inn1 != null && inn1.Status == "Completed")
         {
@@ -178,6 +187,14 @@ public class LiveScoringService : ILiveScoringService
             : momDetails.SelectedPlayerName;
         matchDto.MOMScore = match.MOMScore ?? (momDetails.SelectedPlayerId.HasValue ? momDetails.TotalScore : null);
 
+        if (match.Status == "Completed" && !match.MOMPlayerId.HasValue && momDetails.SelectedPlayerId.HasValue)
+        {
+            match.MOMPlayerId = momDetails.SelectedPlayerId.Value;
+            match.MOMScore = momDetails.TotalScore;
+            match.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+        }
+
         var calculatedResult = MatchResultCalculator.Calculate(match);
         if (calculatedResult.IsComplete || string.IsNullOrWhiteSpace(matchDto.Result))
         {
@@ -208,6 +225,7 @@ public class LiveScoringService : ILiveScoringService
             IsInningsComplete = (activeInningsNumber == 1 ? inn1?.Status : inn2?.Status) == "Completed",
             IsMatchComplete = isMatchComplete,
             MatchSummary = summary,
+            ChasingStatus = chasingStatus,
             MomDetails = momDetails,
             CalculatedResult = calculatedResultDto
         };
@@ -264,6 +282,20 @@ public class LiveScoringService : ILiveScoringService
             .ToList();
 
         bool isOverComplete = isOverAwaitingNextBowler;
+
+        int currentOverLegalBalls = currentOverEvents.Count(e => e.IsLegalBall);
+        int currentOverDeliveriesCount = currentOverEvents.Count;
+
+        bool canChangeBowlerPreOver = inn.Status == "InProgress"
+            && !isOverAwaitingNextBowler
+            && inn.CurrentBowlerId.HasValue
+            && currentOverDeliveriesCount == 0;
+
+        bool canReplaceBowlerMidOver = inn.Status == "InProgress"
+            && !isOverAwaitingNextBowler
+            && inn.CurrentBowlerId.HasValue
+            && currentOverDeliveriesCount > 0
+            && currentOverLegalBalls < 6;
 
         int? previousBowlerId = completedOverLastEvent?.BowlerPlayerId;
         string? previousBowlerName = null;
@@ -455,6 +487,10 @@ public class LiveScoringService : ILiveScoringService
             IsOverComplete = isOverComplete,
             RequiresNewBatsman = requiresNewBatsman,
             LastDismissedPlayerId = lastDismissedId,
+            CanChangeBowlerPreOver = canChangeBowlerPreOver,
+            CanReplaceBowlerMidOver = canReplaceBowlerMidOver,
+            CurrentOverLegalBalls = currentOverLegalBalls,
+            CurrentOverDeliveriesCount = currentOverDeliveriesCount,
             CurrentOverDeliveries = currentOverEvents,
             AllDeliveries = allEventsDto,
             BattingPerformances = inn.BattingPerformances.Select(bp => new BattingRecordDto
@@ -608,6 +644,9 @@ public class LiveScoringService : ILiveScoringService
     {
         var match = await _context.Matches
             .Include(m => m.Innings)
+                .ThenInclude(i => i.Team)
+            .Include(m => m.Team1)
+            .Include(m => m.Team2)
             .FirstOrDefaultAsync(m => m.Id == matchId);
 
         if (match == null) return null;
@@ -620,16 +659,6 @@ public class LiveScoringService : ILiveScoringService
         if (inn.Status != "InProgress")
         {
             throw new InvalidOperationException("Innings is not in progress.");
-        }
-
-        if (req.BowlerPlayerId.HasValue && req.BowlerPlayerId.Value > 0 && req.BowlerPlayerId.Value != inn.CurrentBowlerId)
-        {
-            var requestedBowler = await _context.Players.FindAsync(req.BowlerPlayerId.Value);
-            if (requestedBowler != null)
-            {
-                inn.CurrentBowler = requestedBowler;
-                inn.CurrentBowlerId = requestedBowler.Id;
-            }
         }
 
         if (!inn.CurrentStrikerId.HasValue || !inn.CurrentNonStrikerId.HasValue || !inn.CurrentBowlerId.HasValue)
@@ -762,6 +791,9 @@ public class LiveScoringService : ILiveScoringService
     {
         var match = await _context.Matches
             .Include(m => m.Innings)
+                .ThenInclude(i => i.Team)
+            .Include(m => m.Team1)
+            .Include(m => m.Team2)
             .FirstOrDefaultAsync(m => m.Id == matchId);
 
         if (match == null) return null;
@@ -962,6 +994,9 @@ public class LiveScoringService : ILiveScoringService
     {
         var match = await _context.Matches
             .Include(m => m.Innings)
+                .ThenInclude(i => i.Team)
+            .Include(m => m.Team1)
+            .Include(m => m.Team2)
             .FirstOrDefaultAsync(m => m.Id == matchId);
 
         if (match == null) return null;
@@ -979,6 +1014,29 @@ public class LiveScoringService : ILiveScoringService
             match.ResultType = calcResult.ResultType;
             match.WinningMargin = calcResult.WinningMargin;
             match.WinningTeamId = calcResult.WinningTeamId;
+
+            await SyncPerformancesFromEventsAsync(inn.Id);
+
+            await _context.Entry(match).Collection(m => m.Innings).Query()
+                .Include(i => i.BattingPerformances)
+                    .ThenInclude(bp => bp.Player)
+                .Include(i => i.BowlingPerformances)
+                    .ThenInclude(bowl => bowl.Player)
+                .LoadAsync();
+
+            var allMatchPlayers = await _context.TeamPlayers
+                .Include(tp => tp.Player)
+                .Include(tp => tp.Team)
+                .Where(tp => tp.TeamId == match.Team1Id || tp.TeamId == match.Team2Id)
+                .Select(tp => tp.Player)
+                .ToListAsync();
+
+            var momResult = ManOfTheMatchCalculator.Calculate(match, allMatchPlayers);
+            if (momResult.SelectedPlayerId.HasValue)
+            {
+                match.MOMPlayerId = momResult.SelectedPlayerId.Value;
+                match.MOMScore = momResult.TotalScore;
+            }
         }
 
         match.UpdatedAt = DateTime.UtcNow;
@@ -1050,6 +1108,11 @@ public class LiveScoringService : ILiveScoringService
 
     private async Task CheckInningsAndMatchCompletionAsync(Match match, MatchInnings inn)
     {
+        if (match.Team1 == null)
+            await _context.Entry(match).Reference(m => m.Team1).LoadAsync();
+        if (match.Team2 == null)
+            await _context.Entry(match).Reference(m => m.Team2).LoadAsync();
+
         int maxLegalBalls = match.RequiredOvers * 6;
 
         if (inn.InningsNumber == 1)
@@ -1091,6 +1154,15 @@ public class LiveScoringService : ILiveScoringService
 
                 if (matchFinished)
                 {
+                    await SyncPerformancesFromEventsAsync(inn.Id);
+
+                    await _context.Entry(match).Collection(m => m.Innings).Query()
+                        .Include(i => i.BattingPerformances)
+                            .ThenInclude(bp => bp.Player)
+                        .Include(i => i.BowlingPerformances)
+                            .ThenInclude(bowl => bowl.Player)
+                        .LoadAsync();
+
                     var allMatchPlayers = await _context.TeamPlayers
                         .Include(tp => tp.Player)
                         .Include(tp => tp.Team)
@@ -1282,5 +1354,342 @@ public class LiveScoringService : ILiveScoringService
         }
 
         await _context.SaveChangesAsync();
+    }
+
+    public static ChasingStatusDto? GenerateChasingStatus(Match match, MatchInnings? inn2, MatchInnings? inn1)
+    {
+        if (inn2 == null || inn1 == null) return null;
+
+        int target = inn1.Runs + 1;
+        int currentRuns = inn2.Runs;
+        int runsToWin = target - currentRuns;
+        int totalLegalBalls = match.RequiredOvers * 6;
+        int legalBallsBowled = inn2.Balls; // legal deliveries bowled in current innings
+        int ballsLeft = Math.Max(0, totalLegalBalls - legalBallsBowled);
+
+        bool isTargetChased = currentRuns >= target;
+        bool isTargetNotReached = ballsLeft <= 0 && runsToWin > 0;
+
+        // If match was manually completed/finalized before innings 2 reached target or balls ran out:
+        if ((match.Status == "Completed" || match.Status == "Cancelled" || match.Status == "Abandoned") && !isTargetChased && !isTargetNotReached)
+        {
+            return null;
+        }
+
+        string displayText;
+        if (isTargetChased)
+        {
+            displayText = "Target Chased";
+        }
+        else if (isTargetNotReached)
+        {
+            displayText = "Target Not Reached";
+        }
+        else
+        {
+            string ballText = ballsLeft == 1 ? "1 Ball Left" : $"{ballsLeft} Balls Left";
+            string runText = runsToWin == 1 ? "1 Run to Win" : $"{runsToWin} Runs to Win";
+            displayText = $"{ballText} • {runText}";
+        }
+
+        return new ChasingStatusDto
+        {
+            Target = target,
+            CurrentRuns = currentRuns,
+            RunsToWin = runsToWin,
+            TotalLegalBalls = totalLegalBalls,
+            LegalBallsBowled = legalBallsBowled,
+            BallsLeft = ballsLeft,
+            DisplayText = displayText,
+            IsTargetChased = isTargetChased,
+            IsTargetNotReached = isTargetNotReached,
+            IsActive = inn2.Status == "InProgress" && !isTargetChased && !isTargetNotReached
+        };
+    }
+
+    public async Task<EligibleBowlersResponseDto?> GetEligibleBowlersAsync(int matchId, int inningsId)
+    {
+        var match = await _context.Matches
+            .Include(m => m.Innings)
+            .FirstOrDefaultAsync(m => m.Id == matchId);
+
+        if (match == null) return null;
+        var inn = match.Innings.FirstOrDefault(i => i.Id == inningsId);
+        if (inn == null) return null;
+
+        int bowlingTeamId = match.Team1Id == inn.TeamId ? match.Team2Id : match.Team1Id;
+        var bowlingTeamPlayers = await _context.TeamPlayers
+            .Include(tp => tp.Player)
+            .Where(tp => tp.TeamId == bowlingTeamId && tp.Status == "Active")
+            .Select(tp => tp.Player)
+            .ToListAsync();
+
+        if (bowlingTeamPlayers.Count == 0)
+        {
+            bowlingTeamPlayers = await _context.Players.Where(p => p.Status == "Active").ToListAsync();
+        }
+
+        int completedOverNum = inn.Balls / 6;
+        int currentOverNumber = completedOverNum + 1;
+        int legalBallsInOver = inn.Balls % 6;
+
+        var events = await _context.BallEvents
+            .Where(b => b.InningsId == inn.Id)
+            .ToListAsync();
+
+        var currentOverEvents = events.Where(e => e.OverNumber == currentOverNumber).ToList();
+        bool isMidOver = currentOverEvents.Count > 0 && legalBallsInOver < 6;
+
+        int? prevOverBowlerId = null;
+        if (currentOverNumber > 1)
+        {
+            prevOverBowlerId = events
+                .Where(b => b.OverNumber == currentOverNumber - 1)
+                .OrderBy(b => b.Id)
+                .LastOrDefault()?.BowlerPlayerId;
+        }
+
+        string currentBowlerName = "Unassigned";
+        if (inn.CurrentBowlerId.HasValue)
+        {
+            var cb = await _context.Players.FindAsync(inn.CurrentBowlerId.Value);
+            if (cb != null) currentBowlerName = $"{cb.FirstName} {cb.LastName}";
+        }
+
+        var list = new List<EligibleBowlerItemDto>();
+        foreach (var p in bowlingTeamPlayers)
+        {
+            var pEvents = events.Where(e => e.BowlerPlayerId == p.Id).ToList();
+            int legalBalls = pEvents.Count(e => e.IsLegalBall);
+            int runs = pEvents.Sum(e => e.BatRuns + (e.ExtraType == "Wide" || e.ExtraType == "NoBall" ? e.ExtraRuns : 0));
+            int wkts = pEvents.Count(e => e.IsWicket && e.BowlerCreditedWicket);
+
+            bool isEligible = true;
+            string? reason = null;
+
+            if (inn.CurrentBowlerId.HasValue && p.Id == inn.CurrentBowlerId.Value)
+            {
+                isEligible = false;
+                reason = "Current Bowler";
+            }
+            else if (prevOverBowlerId.HasValue && p.Id == prevOverBowlerId.Value)
+            {
+                isEligible = false;
+                reason = "Bowled Previous Over";
+            }
+
+            list.Add(new EligibleBowlerItemDto
+            {
+                PlayerId = p.Id,
+                PlayerName = $"{p.FirstName} {p.LastName}",
+                PlayerCategory = p.PlayerCategory,
+                LegalBallsBowled = legalBalls,
+                OversDisplay = CricketCalculationHelper.ToCricketOvers(legalBalls),
+                RunsConceded = runs,
+                Wickets = wkts,
+                IsEligible = isEligible,
+                IneligibilityReason = reason
+            });
+        }
+
+        return new EligibleBowlersResponseDto
+        {
+            CurrentBowlerId = inn.CurrentBowlerId ?? 0,
+            CurrentBowlerName = currentBowlerName,
+            CurrentOverNumber = currentOverNumber,
+            LegalBallsBowledInOver = legalBallsInOver,
+            TotalDeliveriesInOver = currentOverEvents.Count,
+            IsMidOver = isMidOver,
+            EligibleBowlers = list.OrderByDescending(b => b.IsEligible).ThenBy(b => b.PlayerName).ToList()
+        };
+    }
+
+    public async Task<LiveScoreDto?> ChangeSelectedBowlerAsync(int matchId, int inningsId, ChangeBowlerRequest req)
+    {
+        var match = await _context.Matches
+            .Include(m => m.Innings)
+            .FirstOrDefaultAsync(m => m.Id == matchId);
+
+        if (match == null) return null;
+        if (match.Status == "Completed" || match.Status == "Cancelled")
+        {
+            throw new InvalidOperationException("Match is already completed or cancelled.");
+        }
+
+        var inn = match.Innings.FirstOrDefault(i => i.Id == inningsId);
+        if (inn == null) return null;
+        if (inn.Status != "InProgress")
+        {
+            throw new InvalidOperationException("Innings is not in progress.");
+        }
+
+        if (!inn.CurrentBowlerId.HasValue)
+        {
+            throw new InvalidOperationException("No current bowler is selected to change.");
+        }
+
+        if (req.NewBowlerPlayerId <= 0)
+        {
+            throw new InvalidOperationException("Please select a valid replacement bowler.");
+        }
+
+        if (req.NewBowlerPlayerId == inn.CurrentBowlerId.Value)
+        {
+            throw new InvalidOperationException("New bowler cannot be the same as the current bowler.");
+        }
+
+        int completedOverNum = inn.Balls / 6;
+        int currentOverNumber = completedOverNum + 1;
+
+        var currentOverDeliveries = await _context.BallEvents
+            .Where(b => b.InningsId == inn.Id && b.OverNumber == currentOverNumber)
+            .ToListAsync();
+
+        if (currentOverDeliveries.Count > 0)
+        {
+            throw new InvalidOperationException("Current bowler has already bowled deliveries in this over. Use 'Complete Over With Another Bowler' to replace bowler mid-over.");
+        }
+
+        if (currentOverNumber > 1)
+        {
+            var prevOverLastEvent = await _context.BallEvents
+                .Where(b => b.InningsId == inn.Id && b.OverNumber == currentOverNumber - 1)
+                .OrderBy(b => b.Id)
+                .LastOrDefaultAsync();
+
+            if (prevOverLastEvent != null && prevOverLastEvent.BowlerPlayerId == req.NewBowlerPlayerId)
+            {
+                throw new InvalidOperationException("Consecutive overs by the same bowler are not allowed.");
+            }
+        }
+
+        int bowlingTeamId = match.Team1Id == inn.TeamId ? match.Team2Id : match.Team1Id;
+        if (bowlingTeamId > 0)
+        {
+            bool hasRoster = await _context.TeamPlayers.AnyAsync(tp => tp.TeamId == bowlingTeamId && tp.Status == "Active");
+            if (hasRoster)
+            {
+                bool belongs = await _context.TeamPlayers.AnyAsync(tp => tp.TeamId == bowlingTeamId && tp.PlayerId == req.NewBowlerPlayerId && tp.Status == "Active");
+                if (!belongs)
+                {
+                    throw new InvalidOperationException("Selected bowler does not belong to the bowling team.");
+                }
+            }
+        }
+
+        var newBowler = await _context.Players.FindAsync(req.NewBowlerPlayerId);
+        if (newBowler == null)
+        {
+            throw new InvalidOperationException("Selected bowler was not found.");
+        }
+
+        inn.CurrentBowlerId = newBowler.Id;
+        inn.CurrentBowler = newBowler;
+        match.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        return await GetLiveScoreAsync(matchId);
+    }
+
+    public async Task<LiveScoreDto?> ReplaceBowlerForRemainingOverAsync(int matchId, int inningsId, ReplaceBowlerRequest req)
+    {
+        var match = await _context.Matches
+            .Include(m => m.Innings)
+            .FirstOrDefaultAsync(m => m.Id == matchId);
+
+        if (match == null) return null;
+        if (match.Status == "Completed" || match.Status == "Cancelled")
+        {
+            throw new InvalidOperationException("Match is already completed or cancelled.");
+        }
+
+        var inn = match.Innings.FirstOrDefault(i => i.Id == inningsId);
+        if (inn == null) return null;
+        if (inn.Status != "InProgress")
+        {
+            throw new InvalidOperationException("Innings is not in progress.");
+        }
+
+        if (!inn.CurrentBowlerId.HasValue)
+        {
+            throw new InvalidOperationException("No current bowler is assigned to this over.");
+        }
+
+        if (req.NewBowlerPlayerId <= 0)
+        {
+            throw new InvalidOperationException("Please select a valid replacement bowler.");
+        }
+
+        if (req.NewBowlerPlayerId == inn.CurrentBowlerId.Value)
+        {
+            throw new InvalidOperationException("New bowler cannot be the same as the current bowler.");
+        }
+
+        int completedOverNum = inn.Balls / 6;
+        int currentOverNumber = completedOverNum + 1;
+        int legalBallsInCurrentOver = inn.Balls % 6;
+
+        var currentOverDeliveries = await _context.BallEvents
+            .Where(b => b.InningsId == inn.Id && b.OverNumber == currentOverNumber)
+            .ToListAsync();
+
+        if (currentOverDeliveries.Count == 0)
+        {
+            throw new InvalidOperationException("No deliveries have been bowled in this over yet. Use 'Change Bowler' instead.");
+        }
+
+        if (legalBallsInCurrentOver == 0 && currentOverDeliveries.Count(e => e.IsLegalBall) == 6)
+        {
+            throw new InvalidOperationException("Current over is already complete.");
+        }
+
+        if (currentOverNumber > 1)
+        {
+            var prevOverLastEvent = await _context.BallEvents
+                .Where(b => b.InningsId == inn.Id && b.OverNumber == currentOverNumber - 1)
+                .OrderBy(b => b.Id)
+                .LastOrDefaultAsync();
+
+            if (prevOverLastEvent != null && prevOverLastEvent.BowlerPlayerId == req.NewBowlerPlayerId)
+            {
+                throw new InvalidOperationException("Consecutive overs by the same bowler are not allowed.");
+            }
+        }
+
+        int bowlingTeamId = match.Team1Id == inn.TeamId ? match.Team2Id : match.Team1Id;
+        if (bowlingTeamId > 0)
+        {
+            bool hasRoster = await _context.TeamPlayers.AnyAsync(tp => tp.TeamId == bowlingTeamId && tp.Status == "Active");
+            if (hasRoster)
+            {
+                bool belongs = await _context.TeamPlayers.AnyAsync(tp => tp.TeamId == bowlingTeamId && tp.PlayerId == req.NewBowlerPlayerId && tp.Status == "Active");
+                if (!belongs)
+                {
+                    throw new InvalidOperationException("Selected bowler does not belong to the bowling team.");
+                }
+            }
+        }
+
+        var newBowler = await _context.Players.FindAsync(req.NewBowlerPlayerId);
+        if (newBowler == null)
+        {
+            throw new InvalidOperationException("Selected bowler was not found.");
+        }
+
+        // IMPORTANT:
+        // Do NOT delete or modify any existing BallEvents!
+        // Do NOT reset ball count!
+        // Simply update inn.CurrentBowlerId so that future deliveries in this over use newBowler.Id
+        inn.CurrentBowlerId = newBowler.Id;
+        inn.CurrentBowler = newBowler;
+        match.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        // Auto-synchronize bowling performances so both bowlers' stats are up to date
+        await SyncPerformancesFromEventsAsync(inn.Id);
+
+        return await GetLiveScoreAsync(matchId);
     }
 }

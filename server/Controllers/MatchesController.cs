@@ -66,34 +66,61 @@ public class MatchesController : ControllerBase
             query = query.OrderBy(m => m.MatchOrder).ThenBy(m => m.ScheduledDate);
         }
 
-        var matches = await query
-            .Select(m => new MatchDto
+        var matchEntities = await query
+            .Select(m => new
             {
-                Id = m.Id,
-                SeriesId = m.SeriesId,
+                m.Id,
+                m.SeriesId,
                 SeriesName = m.Series.Name,
-                Team1Id = m.Team1Id,
+                m.Team1Id,
                 Team1Name = m.Team1.Name,
                 Team1ShortName = m.Team1.ShortName,
-                Team2Id = m.Team2Id,
+                m.Team2Id,
                 Team2Name = m.Team2.Name,
                 Team2ShortName = m.Team2.ShortName,
-                MatchOrder = m.MatchOrder,
-                RequiredOvers = m.RequiredOvers,
-                ScheduledDate = m.ScheduledDate,
-                ScheduledTime = m.ScheduledTime,
-                Address = m.Address,
-                Status = m.Status,
-                WinningTeamId = m.WinningTeamId,
+                m.MatchOrder,
+                m.RequiredOvers,
+                m.ScheduledDate,
+                m.ScheduledTime,
+                m.Address,
+                m.Status,
+                m.WinningTeamId,
                 WinningTeamName = m.WinningTeam != null ? m.WinningTeam.Name : null,
-                Result = m.Result,
-                ResultType = m.ResultType,
-                WinningMargin = m.WinningMargin,
-                MOMPlayerId = m.MOMPlayerId,
+                m.Result,
+                m.ResultType,
+                m.WinningMargin,
+                m.MOMPlayerId,
                 MOMPlayerName = m.MOMPlayer != null ? $"{m.MOMPlayer.FirstName} {m.MOMPlayer.LastName}" : null,
-                MOMScore = m.MOMScore
+                m.MOMScore
             })
             .ToListAsync();
+
+        var matches = matchEntities.Select(m => new MatchDto
+        {
+            Id = m.Id,
+            SeriesId = m.SeriesId,
+            SeriesName = m.SeriesName,
+            Team1Id = m.Team1Id,
+            Team1Name = m.Team1Name,
+            Team1ShortName = m.Team1ShortName,
+            Team2Id = m.Team2Id,
+            Team2Name = m.Team2Name,
+            Team2ShortName = m.Team2ShortName,
+            MatchOrder = m.MatchOrder,
+            RequiredOvers = m.RequiredOvers,
+            ScheduledDate = m.ScheduledDate,
+            ScheduledTime = m.ScheduledTime,
+            Address = m.Address,
+            Status = m.Status,
+            WinningTeamId = m.WinningTeamId,
+            WinningTeamName = m.WinningTeamName,
+            Result = FormatMatchResult(m.Result, m.Team1Name, m.Team2Name),
+            ResultType = m.ResultType,
+            WinningMargin = m.WinningMargin,
+            MOMPlayerId = m.MOMPlayerId,
+            MOMPlayerName = m.MOMPlayerName,
+            MOMScore = m.MOMScore
+        }).ToList();
 
         return Ok(matches);
     }
@@ -130,10 +157,25 @@ public class MatchesController : ControllerBase
             Status = m.Status,
             WinningTeamId = m.WinningTeamId,
             WinningTeamName = m.WinningTeam?.Name,
-            Result = m.Result,
+            Result = FormatMatchResult(m.Result, m.Team1.Name, m.Team2.Name),
             MOMPlayerId = m.MOMPlayerId,
             MOMPlayerName = m.MOMPlayer != null ? $"{m.MOMPlayer.FirstName} {m.MOMPlayer.LastName}" : null
         });
+    }
+
+    private static string FormatMatchResult(string? result, string? team1Name, string? team2Name)
+    {
+        if (string.IsNullOrWhiteSpace(result)) return string.Empty;
+        var formatted = result;
+        if (formatted.StartsWith("Team 1 ", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(team1Name))
+        {
+            formatted = team1Name + formatted.Substring("Team 1".Length);
+        }
+        else if (formatted.StartsWith("Team 2 ", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(team2Name))
+        {
+            formatted = team2Name + formatted.Substring("Team 2".Length);
+        }
+        return formatted;
     }
 
     [RequirePermission("Matches")]
@@ -373,5 +415,46 @@ public class MatchesController : ControllerBase
         var result = await _liveScoringService.CompleteMatchAsync(id, req);
         if (result == null) return NotFound(new { message = "Match not found." });
         return Ok(result);
+    }
+
+    [RequirePermission("LiveScoring")]
+    [HttpGet("{id}/innings/{inningsId}/eligible-bowlers")]
+    public async Task<IActionResult> GetEligibleBowlers(int id, int inningsId)
+    {
+        var result = await _liveScoringService.GetEligibleBowlersAsync(id, inningsId);
+        if (result == null) return NotFound(new { message = "Match or Innings not found." });
+        return Ok(result);
+    }
+
+    [RequirePermission("LiveScoring")]
+    [HttpPost("{id}/innings/{inningsId}/change-bowler")]
+    public async Task<IActionResult> ChangeSelectedBowler(int id, int inningsId, [FromBody] ChangeBowlerRequest req)
+    {
+        try
+        {
+            var result = await _liveScoringService.ChangeSelectedBowlerAsync(id, inningsId, req);
+            if (result == null) return NotFound(new { message = "Match or Innings not found." });
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [RequirePermission("LiveScoring")]
+    [HttpPost("{id}/innings/{inningsId}/replace-bowler-in-over")]
+    public async Task<IActionResult> ReplaceBowlerForRemainingOver(int id, int inningsId, [FromBody] ReplaceBowlerRequest req)
+    {
+        try
+        {
+            var result = await _liveScoringService.ReplaceBowlerForRemainingOverAsync(id, inningsId, req);
+            if (result == null) return NotFound(new { message = "Match or Innings not found." });
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 }

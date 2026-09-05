@@ -259,6 +259,7 @@ public class LiveScoreDto
     public bool IsInningsComplete { get; set; }
     public bool IsMatchComplete { get; set; }
     public string? MatchSummary { get; set; }
+    public ChasingStatusDto? ChasingStatus { get; set; }
     public MomCalculationResultDto? MomDetails { get; set; }
     public MatchResultCalculationResultDto? CalculatedResult { get; set; }
 }
@@ -284,6 +285,7 @@ public class LiveInningsDto
     public double CurrentRunRate { get; set; }
     public int? TargetRuns { get; set; }
     public double? RequiredRunRate { get; set; }
+    public ChasingStatusDto? ChasingStatus { get; set; }
 
     public LiveBatsmanDto? Striker { get; set; }
     public LiveBatsmanDto? NonStriker { get; set; }
@@ -295,6 +297,11 @@ public class LiveInningsDto
     public bool IsOverComplete { get; set; }
     public bool RequiresNewBatsman { get; set; }
     public int? LastDismissedPlayerId { get; set; }
+
+    public bool CanChangeBowlerPreOver { get; set; }
+    public bool CanReplaceBowlerMidOver { get; set; }
+    public int CurrentOverLegalBalls { get; set; }
+    public int CurrentOverDeliveriesCount { get; set; }
 
     public List<BallEventDto> CurrentOverDeliveries { get; set; } = new();
     public List<BallEventDto> AllDeliveries { get; set; } = new();
@@ -463,3 +470,52 @@ public class MatchResultCalculationResultDto
     public bool IsComplete { get; set; }
     public string? Summary { get; set; }
 }
+
+public class ChasingStatusDto
+{
+    public int Target { get; set; }
+    public int CurrentRuns { get; set; }
+    public int RunsToWin { get; set; }
+    public int TotalLegalBalls { get; set; }
+    public int LegalBallsBowled { get; set; }
+    public int BallsLeft { get; set; }
+    public string DisplayText { get; set; } = string.Empty;
+    public bool IsTargetChased { get; set; }
+    public bool IsTargetNotReached { get; set; }
+    public bool IsActive { get; set; }
+}
+
+public class ChangeBowlerRequest
+{
+    public int NewBowlerPlayerId { get; set; }
+}
+
+public class ReplaceBowlerRequest
+{
+    public int NewBowlerPlayerId { get; set; }
+}
+
+public class EligibleBowlerItemDto
+{
+    public int PlayerId { get; set; }
+    public string PlayerName { get; set; } = string.Empty;
+    public string PlayerCategory { get; set; } = string.Empty;
+    public int LegalBallsBowled { get; set; }
+    public string OversDisplay { get; set; } = "0.0";
+    public int RunsConceded { get; set; }
+    public int Wickets { get; set; }
+    public bool IsEligible { get; set; }
+    public string? IneligibilityReason { get; set; }
+}
+
+public class EligibleBowlersResponseDto
+{
+    public int CurrentBowlerId { get; set; }
+    public string CurrentBowlerName { get; set; } = string.Empty;
+    public int CurrentOverNumber { get; set; }
+    public int LegalBallsBowledInOver { get; set; }
+    public int TotalDeliveriesInOver { get; set; }
+    public bool IsMidOver { get; set; }
+    public List<EligibleBowlerItemDto> EligibleBowlers { get; set; } = new();
+}
+
