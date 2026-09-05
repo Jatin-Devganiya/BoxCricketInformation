@@ -210,9 +210,27 @@ export const Teams: React.FC = () => {
 
   const handleSaveTeam = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name.trim() || !formData.shortName.trim()) {
+    const trimmedName = formData.name.trim();
+    const trimmedShortName = formData.shortName.trim();
+
+    if (!trimmedName || !trimmedShortName) {
       setFormError('Team name and short name are required.');
       return;
+    }
+
+    // Immediate client-side uniqueness validation
+    if (formData.status === 'Active') {
+      const isDuplicate = teams.some(
+        (t) =>
+          t.status === 'Active' &&
+          (!editingTeam || t.id !== editingTeam.id) &&
+          t.name.trim().toLowerCase() === trimmedName.toLowerCase()
+      );
+
+      if (isDuplicate) {
+        setFormError('Team name already exists.');
+        return;
+      }
     }
 
     try {

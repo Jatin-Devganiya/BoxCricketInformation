@@ -187,22 +187,46 @@ public class PlayersController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(req.FirstName) || string.IsNullOrWhiteSpace(req.LastName))
         {
-            return BadRequest(new { message = "First name and last name are required." });
+            return BadRequest(new { success = false, message = "First name and last name are required." });
+        }
+
+        var trimmedFirstName = req.FirstName.Trim();
+        var trimmedLastName = req.LastName.Trim();
+        var playerStatus = string.IsNullOrWhiteSpace(req.Status) ? "Active" : req.Status.Trim();
+
+        if (playerStatus.Equals("Active", StringComparison.OrdinalIgnoreCase))
+        {
+            var isDuplicate = await _context.Players.AnyAsync(p =>
+                p.Status == "Active" &&
+                p.FirstName.ToLower() == trimmedFirstName.ToLower() &&
+                p.LastName.ToLower() == trimmedLastName.ToLower());
+
+            if (isDuplicate)
+            {
+                return BadRequest(new { success = false, message = "Player with the same first name and last name already exists." });
+            }
         }
 
         var player = new Player
         {
-            FirstName = req.FirstName.Trim(),
-            LastName = req.LastName.Trim(),
+            FirstName = trimmedFirstName,
+            LastName = trimmedLastName,
             PlayerCategory = req.PlayerCategory,
-            Status = string.IsNullOrWhiteSpace(req.Status) ? "Active" : req.Status,
+            Status = playerStatus,
             UserId = req.UserId,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
 
-        await _context.Players.AddAsync(player);
-        await _context.SaveChangesAsync();
+        try
+        {
+            await _context.Players.AddAsync(player);
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (ex.GetBaseException() is Microsoft.Data.SqlClient.SqlException sqlEx && (sqlEx.Number == 2601 || sqlEx.Number == 2627))
+        {
+            return BadRequest(new { success = false, message = "Player with the same first name and last name already exists." });
+        }
 
         if (req.TeamId.HasValue && req.TeamId.Value > 0)
         {
@@ -231,13 +255,36 @@ public class PlayersController : ControllerBase
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdatePlayer(int id, [FromBody] UpdatePlayerRequest req)
     {
-        var player = await _context.Players.FindAsync(id);
-        if (player == null) return NotFound(new { message = "Player not found." });
+        if (string.IsNullOrWhiteSpace(req.FirstName) || string.IsNullOrWhiteSpace(req.LastName))
+        {
+            return BadRequest(new { success = false, message = "First name and last name are required." });
+        }
 
-        player.FirstName = req.FirstName.Trim();
-        player.LastName = req.LastName.Trim();
+        var player = await _context.Players.FindAsync(id);
+        if (player == null) return NotFound(new { success = false, message = "Player not found." });
+
+        var trimmedFirstName = req.FirstName.Trim();
+        var trimmedLastName = req.LastName.Trim();
+        var targetStatus = string.IsNullOrWhiteSpace(req.Status) ? player.Status : req.Status.Trim();
+
+        if (targetStatus.Equals("Active", StringComparison.OrdinalIgnoreCase))
+        {
+            var isDuplicate = await _context.Players.AnyAsync(p =>
+                p.Id != id &&
+                p.Status == "Active" &&
+                p.FirstName.ToLower() == trimmedFirstName.ToLower() &&
+                p.LastName.ToLower() == trimmedLastName.ToLower());
+
+            if (isDuplicate)
+            {
+                return BadRequest(new { success = false, message = "Player with the same first name and last name already exists." });
+            }
+        }
+
+        player.FirstName = trimmedFirstName;
+        player.LastName = trimmedLastName;
         player.PlayerCategory = req.PlayerCategory;
-        player.Status = req.Status;
+        player.Status = targetStatus;
         player.UserId = req.UserId;
         player.UpdatedAt = DateTime.UtcNow;
 
@@ -261,7 +308,14 @@ public class PlayersController : ControllerBase
             }
         }
 
-        await _context.SaveChangesAsync();
+        try
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (ex.GetBaseException() is Microsoft.Data.SqlClient.SqlException sqlEx && (sqlEx.Number == 2601 || sqlEx.Number == 2627))
+        {
+            return BadRequest(new { success = false, message = "Player with the same first name and last name already exists." });
+        }
 
         return Ok(new PlayerDto
         {

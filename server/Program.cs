@@ -22,6 +22,7 @@ builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddScoped<IPlayerStatsService, PlayerStatsService>();
 builder.Services.AddScoped<IScorecardService, ScorecardService>();
 builder.Services.AddScoped<ILiveScoringService, LiveScoringService>();
+builder.Services.AddScoped<IStatusValidationService, StatusValidationService>();
 
 // 3. Configure JWT Authentication
 var jwtKey = builder.Configuration["Jwt:Key"] ?? "BoxCricketStatisticsManagementSecureKey_2026_SecretKey!";

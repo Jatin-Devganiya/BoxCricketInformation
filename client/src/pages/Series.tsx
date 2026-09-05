@@ -3,6 +3,7 @@ import { seriesApi } from '../api/client';
 import { Series as SeriesType, SeriesDetail } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { Modal } from '../components/Modal';
+import { getAllowedSeriesTransitions, isSeriesStatusLocked } from '../utils/statusRules';
 import {
   Calendar,
   Plus,
@@ -218,9 +219,25 @@ export const Series: React.FC<SeriesProps> = ({ onViewScorecard }) => {
 
   const handleSaveSeries = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name.trim()) {
+    const trimmedName = formData.name.trim();
+    if (!trimmedName) {
       setFormError('Series name is required.');
       return;
+    }
+
+    // Immediate client-side uniqueness validation
+    if (formData.status !== 'Cancelled') {
+      const isDuplicate = seriesList.some(
+        (s) =>
+          s.status !== 'Cancelled' &&
+          (!editingSeries || s.id !== editingSeries.id) &&
+          s.name.trim().toLowerCase() === trimmedName.toLowerCase()
+      );
+
+      if (isDuplicate) {
+        setFormError('Series name already exists.');
+        return;
+      }
     }
 
     try {
@@ -245,8 +262,8 @@ export const Series: React.FC<SeriesProps> = ({ onViewScorecard }) => {
     try {
       await seriesApi.delete(id);
       fetchSeries();
-    } catch (err) {
-      alert('Failed to cancel series.');
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to cancel series.');
     }
   };
 
@@ -437,13 +454,15 @@ export const Series: React.FC<SeriesProps> = ({ onViewScorecard }) => {
                               >
                                 <Edit2 size={14} />
                               </button>
-                              <button
-                                className="btn btn-sm btn-danger"
-                                onClick={() => handleDeleteSeries(s.id)}
-                                title="Cancel Series"
-                              >
-                                <Trash2 size={14} />
-                              </button>
+                              {!isSeriesStatusLocked(s.status) && (
+                                <button
+                                  className="btn btn-sm btn-danger"
+                                  onClick={() => handleDeleteSeries(s.id)}
+                                  title="Cancel Series"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
                             </>
                           )}
                         </div>
@@ -761,13 +780,20 @@ export const Series: React.FC<SeriesProps> = ({ onViewScorecard }) => {
             <select
               className="form-select"
               value={formData.status}
+              disabled={editingSeries ? isSeriesStatusLocked(editingSeries.status) : false}
               onChange={(e) => setFormData({ ...formData, status: e.target.value })}
             >
-              <option value="Scheduled">Scheduled</option>
-              <option value="InProgress">InProgress</option>
-              <option value="Completed">Completed</option>
-              <option value="Cancelled">Cancelled</option>
+              {getAllowedSeriesTransitions(editingSeries?.status).map((st) => (
+                <option key={st} value={st}>
+                  {st}
+                </option>
+              ))}
             </select>
+            {editingSeries && isSeriesStatusLocked(editingSeries.status) && (
+              <small style={{ color: 'var(--text-muted)', marginTop: '0.25rem', display: 'block' }}>
+                This series is {editingSeries.status.toLowerCase()}. Series status cannot be changed.
+              </small>
+            )}
           </div>
 
           <div className="form-group">

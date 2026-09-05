@@ -174,9 +174,28 @@ export const Players: React.FC = () => {
 
   const handleSavePlayer = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.firstName.trim() || !formData.lastName.trim()) {
+    const trimmedFirstName = formData.firstName.trim();
+    const trimmedLastName = formData.lastName.trim();
+
+    if (!trimmedFirstName || !trimmedLastName) {
       setFormError('First name and last name are required.');
       return;
+    }
+
+    // Immediate client-side uniqueness validation
+    if (formData.status === 'Active') {
+      const isDuplicate = players.some(
+        (p) =>
+          p.status === 'Active' &&
+          (!editingPlayer || p.id !== editingPlayer.id) &&
+          p.firstName.trim().toLowerCase() === trimmedFirstName.toLowerCase() &&
+          p.lastName.trim().toLowerCase() === trimmedLastName.toLowerCase()
+      );
+
+      if (isDuplicate) {
+        setFormError('Player with the same first name and last name already exists.');
+        return;
+      }
     }
 
     try {
@@ -1051,16 +1070,10 @@ export const Players: React.FC = () => {
                         <td style={{ fontWeight: 600 }}>{selectedStats.batting.fives}</td>
                       </tr>
                       <tr>
-                        <td>6-in-a-Row Streaks</td>
+                        <td>6-6-6 in row</td>
                         <td style={{ fontWeight: 600 }}>{selectedStats.batting.sixInRowCount}</td>
                         <td>4-Boundaries-in-Row</td>
                         <td style={{ fontWeight: 600 }}>{selectedStats.batting.fourInRowCount}</td>
-                      </tr>
-                      <tr>
-                        <td>Dismissals</td>
-                        <td style={{ fontWeight: 600 }}>{selectedStats.batting.dismissals}</td>
-                        <td>6-Run Balls Count</td>
-                        <td style={{ fontWeight: 600 }}>{selectedStats.batting.sixRunBalls}</td>
                       </tr>
                     </tbody>
                   </table>

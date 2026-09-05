@@ -11,6 +11,9 @@ public static class DbInitializer
 
         // Ensure BallEvents table and MatchInnings columns exist for existing databases
         var ensureSchemaSql = @"
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
+
 IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('MatchInnings') AND name = 'CurrentStrikerId')
 BEGIN
     ALTER TABLE MatchInnings ADD CurrentStrikerId INT NULL;
@@ -96,6 +99,32 @@ BEGIN
         CONSTRAINT FK_UserPermissionOverrides_Users_UserId FOREIGN KEY (UserId) REFERENCES Users(Id) ON DELETE CASCADE
     );
     CREATE UNIQUE INDEX IX_UserPermissionOverrides_UserId_Permission ON UserPermissionOverrides(UserId, Permission);
+END
+
+-- Resolve existing duplicate test data safely before creating unique indexes
+-- 1. Unused duplicate player (Id 29 with 0 matches) marked Inactive
+UPDATE Players SET Status = 'Inactive' WHERE FirstName = 'Jatin' AND LastName = 'Devganiya' AND Id = 29 AND Status = 'Active';
+
+-- 2. Duplicate series renamed with suffix to avoid data loss
+UPDATE Series SET Name = 'New Umpire Tournament (Archived ' + CAST(Id AS NVARCHAR(10)) + ')' WHERE Name = 'New Umpire Tournament' AND Id IN (4, 6);
+UPDATE Series SET Name = 'Unauthorized User Series (' + CAST(Id AS NVARCHAR(10)) + ')' WHERE Name = 'Unauthorized User Series' AND Id IN (3, 7, 10);
+
+-- Unique filtered index on Players (FirstName, LastName) for Active records
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_Players_FirstName_LastName_Active' AND object_id = OBJECT_ID('Players'))
+BEGIN
+    CREATE UNIQUE NONCLUSTERED INDEX IX_Players_FirstName_LastName_Active ON Players(FirstName, LastName) WHERE [Status] = 'Active';
+END
+
+-- Unique filtered index on Teams (Name) for Active records
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_Teams_Name_Active' AND object_id = OBJECT_ID('Teams'))
+BEGIN
+    CREATE UNIQUE NONCLUSTERED INDEX IX_Teams_Name_Active ON Teams(Name) WHERE [Status] = 'Active';
+END
+
+-- Unique filtered index on Series (Name) for non-cancelled records
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_Series_Name_Active' AND object_id = OBJECT_ID('Series'))
+BEGIN
+    CREATE UNIQUE NONCLUSTERED INDEX IX_Series_Name_Active ON Series(Name) WHERE [Status] <> 'Cancelled';
 END
 ";
         try

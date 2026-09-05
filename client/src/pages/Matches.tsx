@@ -4,6 +4,15 @@ import { Match, Series, Team, Player, LiveScore, LiveInnings, EligibleBowlersRes
 import { useAuth } from '../context/AuthContext';
 import { Modal } from '../components/Modal';
 import {
+  canAddMatchesToSeries,
+  getAllowedMatchCreationStatuses,
+  getAllowedMatchTransitions,
+  isMatchStatusLocked,
+  canStartMatch,
+  canLiveScore,
+  getSeriesNotificationMessage,
+} from '../utils/statusRules';
+import {
   Trophy,
   Plus,
   Calendar,
@@ -51,6 +60,12 @@ export const Matches: React.FC<MatchesProps> = ({
   const [selectedSeriesId, setSelectedSeriesId] = useState<number>(0);
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
+  const currentSelectedSeries = selectedSeriesId > 0 ? seriesList.find((s) => s.id === selectedSeriesId) : null;
+  const canScheduleInSelectedSeries = currentSelectedSeries
+    ? canAddMatchesToSeries(currentSelectedSeries.status)
+    : seriesList.some((s) => canAddMatchesToSeries(s.status));
+  const isSelectedSeriesCompleted = currentSelectedSeries?.status === 'Completed' || currentSelectedSeries?.status === 'Cancelled';
 
   // Schedule Match Modal
   const [createModalOpen, setCreateModalOpen] = useState<boolean>(false);
@@ -221,7 +236,21 @@ export const Matches: React.FC<MatchesProps> = ({
 
   const handleOpenCreateMatch = () => {
     setEditingMatch(null);
-    const defaultSeries = seriesList[0]?.id || 0;
+    // Find active series (Scheduled or InProgress)
+    const activeSeriesList = seriesList.filter((s) => canAddMatchesToSeries(s.status));
+    if (activeSeriesList.length === 0 && seriesList.length > 0) {
+      alert('All existing series are completed or cancelled. Please create a new series under the Series section before scheduling matches.');
+      return;
+    }
+
+    const currentSelected = seriesList.find((s) => s.id === selectedSeriesId);
+    const defaultSeries = (currentSelected && canAddMatchesToSeries(currentSelected.status))
+      ? currentSelected.id
+      : (activeSeriesList[0]?.id || 0);
+
+    const targetSeriesObj = seriesList.find((s) => s.id === defaultSeries);
+    const allowedCreationStatuses = getAllowedMatchCreationStatuses(targetSeriesObj?.status);
+
     const defaultT1 = teams[0]?.id || 0;
     const defaultT2 = teams[1]?.id || 0;
     setMatchFormData({
@@ -233,7 +262,7 @@ export const Matches: React.FC<MatchesProps> = ({
       scheduledDate: new Date().toISOString().split('T')[0],
       scheduledTime: '18:00',
       address: 'Surat Box Cricket Arena, Pitch 1',
-      status: 'Scheduled',
+      status: allowedCreationStatuses[0] || 'Scheduled',
     });
     setMatchFormError(null);
     setCreateModalOpen(true);
@@ -267,6 +296,12 @@ export const Matches: React.FC<MatchesProps> = ({
       return;
     }
 
+    const targetSeries = seriesList.find((s) => s.id === Number(matchFormData.seriesId));
+    if (!editingMatch && !canAddMatchesToSeries(targetSeries?.status)) {
+      setMatchFormError(`Series "${targetSeries?.name}" is ${targetSeries?.status}. Cannot add matches to this series.`);
+      return;
+    }
+
     try {
       setMatchSubmitting(true);
       setMatchFormError(null);
@@ -281,6 +316,35 @@ export const Matches: React.FC<MatchesProps> = ({
       setMatchFormError(err.response?.data?.message || 'Failed to save match.');
     } finally {
       setMatchSubmitting(false);
+    }
+  };
+
+  const handleStartMatch = async (m: Match) => {
+    const parentSeries = seriesList.find((s) => s.id === m.seriesId);
+    if (!parentSeries || parentSeries.status !== 'InProgress') {
+      alert('Series has not started yet. Match cannot be started.');
+      return;
+    }
+    try {
+      setLoading(true);
+      await matchesApi.update(m.id, {
+        seriesId: m.seriesId,
+        team1Id: m.team1Id,
+        team2Id: m.team2Id,
+        matchOrder: m.matchOrder,
+        requiredOvers: m.requiredOvers,
+        scheduledDate: m.scheduledDate,
+        scheduledTime: m.scheduledTime,
+        address: m.address,
+        status: 'InProgress',
+      });
+      await fetchMatches();
+      setModalTab('live');
+      handleOpenScorecard(m.id);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to start match.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -828,15 +892,31 @@ export const Matches: React.FC<MatchesProps> = ({
           </select>
 
           {canManageMatches && (
-            <button className="btn btn-primary" onClick={handleOpenCreateMatch}>
-              <Plus size={16} /> Schedule Match
+            <button
+              className="btn btn-primary"
+              onClick={handleOpenCreateMatch}
+              disabled={!canScheduleInSelectedSeries}
+              title={
+                !canScheduleInSelectedSeries
+                  ? currentSelectedSeries
+                    ? `Series "${currentSelectedSeries.name}" is ${currentSelectedSeries.status}. Match scheduling is not allowed.`
+                    : 'No active series available to schedule matches.'
+                  : 'Schedule Match'
+              }
+              style={
+                !canScheduleInSelectedSeries
+                  ? { opacity: 0.55, cursor: 'not-allowed', filter: 'grayscale(0.5)' }
+                  : {}
+              }
+            >
+              {!canScheduleInSelectedSeries ? <Lock size={16} /> : <Plus size={16} />} Schedule Match
             </button>
           )}
         </div>
       </div>
 
-      {/* Series Selection Dropdown Bar */}
-      <div className="series-selection-bar" style={{ padding: '0.85rem 1.25rem' }}>
+      {/* Series Selection Dropdown Bar & Notification Bar */}
+      <div className="series-selection-bar" style={{ padding: '0.85rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
             <div className="series-selection-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}>
@@ -876,29 +956,156 @@ export const Matches: React.FC<MatchesProps> = ({
             </button>
           </div>
         </div>
-      </div>
 
-      {/* Selected Series Banner Notification */}
-      {selectedSeries && (
-        <div className="series-banner">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            <CheckCircle size={17} style={{ color: '#10b981' }} />
-            <span style={{ fontSize: '0.9rem' }}>
-              Showing matches for <strong>{selectedSeries.name}</strong> sorted in{' '}
-              <strong style={{ color: '#10b981' }}>
-                {sortOrder === 'asc' ? 'Ascending Order (Match #1 → #N)' : 'Descending Order'}
-              </strong>{' '}
-              ({sortedMatches.length} match{sortedMatches.length !== 1 ? 'es' : ''})
+        {/* Series Notification Bar */}
+        <div
+          className="series-notification-bar"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '0.75rem',
+            padding: '0.65rem 1rem',
+            borderRadius: '8px',
+            background: isSelectedSeriesCompleted
+              ? 'rgba(239, 68, 68, 0.09)'
+              : currentSelectedSeries?.status === 'InProgress'
+              ? 'rgba(245, 158, 11, 0.09)'
+              : currentSelectedSeries
+              ? 'rgba(16, 185, 129, 0.09)'
+              : 'rgba(59, 130, 246, 0.08)',
+            border: `1px solid ${
+              isSelectedSeriesCompleted
+                ? 'rgba(239, 68, 68, 0.28)'
+                : currentSelectedSeries?.status === 'InProgress'
+                ? 'rgba(245, 158, 11, 0.28)'
+                : currentSelectedSeries
+                ? 'rgba(16, 185, 129, 0.25)'
+                : 'rgba(59, 130, 246, 0.2)'
+            }`,
+            fontSize: '0.85rem',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+              Series:
             </span>
+            <span style={{ fontWeight: 600, color: 'var(--text-primary)', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+              {currentSelectedSeries ? (
+                <>
+                  <Trophy size={15} style={{ color: isSelectedSeriesCompleted ? '#10b981' : 'var(--accent-cricket)' }} />
+                  {currentSelectedSeries.name}
+                </>
+              ) : (
+                <>
+                  <Layers size={15} style={{ color: '#60a5fa' }} />
+                  All Series / Tournaments
+                </>
+              )}
+            </span>
+
+            <span style={{ color: 'var(--border-color)', margin: '0 0.1rem' }}>|</span>
+
+            <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+              Status:
+            </span>
+            {currentSelectedSeries ? (
+              <span
+                className={`badge ${
+                  currentSelectedSeries.status === 'Completed'
+                    ? 'badge-success'
+                    : currentSelectedSeries.status === 'InProgress'
+                    ? 'badge-warning'
+                    : currentSelectedSeries.status === 'Cancelled'
+                    ? 'badge-danger'
+                    : 'badge-info'
+                }`}
+                style={{ fontSize: '0.78rem', padding: '0.2rem 0.6rem' }}
+              >
+                {currentSelectedSeries.status === 'Completed' && <CheckCircle size={12} />}
+                {currentSelectedSeries.status === 'InProgress' && <Activity size={12} />}
+                {currentSelectedSeries.status}
+              </span>
+            ) : (
+              <span className="badge badge-info" style={{ fontSize: '0.78rem', padding: '0.2rem 0.6rem' }}>
+                All Statuses
+              </span>
+            )}
+
+            {currentSelectedSeries && (
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  fontWeight: 600,
+                  fontSize: '0.78rem',
+                  padding: '0.2rem 0.6rem',
+                  borderRadius: '5px',
+                  background:
+                    currentSelectedSeries.status === 'Completed'
+                      ? 'rgba(16, 185, 129, 0.12)'
+                      : currentSelectedSeries.status === 'InProgress'
+                      ? 'rgba(245, 158, 11, 0.12)'
+                      : currentSelectedSeries.status === 'Cancelled'
+                      ? 'rgba(239, 68, 68, 0.12)'
+                      : 'rgba(59, 130, 246, 0.12)',
+                  color:
+                    currentSelectedSeries.status === 'Completed'
+                      ? '#34d399'
+                      : currentSelectedSeries.status === 'InProgress'
+                      ? '#fbbf24'
+                      : currentSelectedSeries.status === 'Cancelled'
+                      ? '#f87171'
+                      : '#60a5fa',
+                  border:
+                    currentSelectedSeries.status === 'Completed'
+                      ? '1px solid rgba(16, 185, 129, 0.25)'
+                      : currentSelectedSeries.status === 'InProgress'
+                      ? '1px solid rgba(245, 158, 11, 0.25)'
+                      : currentSelectedSeries.status === 'Cancelled'
+                      ? '1px solid rgba(239, 68, 68, 0.25)'
+                      : '1px solid rgba(59, 130, 246, 0.25)',
+                }}
+              >
+                {currentSelectedSeries.status === 'Completed' && <CheckCircle size={12} />}
+                {currentSelectedSeries.status === 'InProgress' && <Activity size={12} />}
+                {currentSelectedSeries.status === 'Cancelled' && <XCircle size={12} />}
+                {currentSelectedSeries.status === 'Scheduled' && <Clock size={12} />}
+                {getSeriesNotificationMessage(currentSelectedSeries.status)}
+              </span>
+            )}
           </div>
-          <button
-            className="btn btn-sm btn-secondary"
-            onClick={() => setSelectedSeriesId(0)}
-          >
-            Show All Series
-          </button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+            {currentSelectedSeries ? (
+              <>
+                <span>
+                  Matches:{' '}
+                  <strong style={{ color: 'var(--text-primary)' }}>
+                    {currentSelectedSeries.completedMatches ?? 0} / {currentSelectedSeries.totalMatches ?? 0}
+                  </strong>{' '}
+                  Completed
+                </span>
+                {currentSelectedSeries.startDate && (
+                  <span>
+                    Duration:{' '}
+                    <strong style={{ color: 'var(--text-primary)' }}>
+                      {new Date(currentSelectedSeries.startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                      {currentSelectedSeries.endDate ? ` - ${new Date(currentSelectedSeries.endDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}` : ''}
+                    </strong>
+                  </span>
+                )}
+              </>
+            ) : (
+              <span>
+                Total Series: <strong style={{ color: 'var(--text-primary)' }}>{seriesList.length}</strong> • Total Matches: <strong style={{ color: 'var(--text-primary)' }}>{matches.length}</strong>
+              </span>
+            )}
+          </div>
         </div>
-      )}
+      </div>
 
       {/* Matches Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '1.25rem' }}>
@@ -1017,13 +1224,100 @@ export const Matches: React.FC<MatchesProps> = ({
 
               {/* Action Buttons */}
               <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-color)' }}>
-                <button
-                  className="btn btn-sm btn-primary"
-                  style={{ flex: 1 }}
-                  onClick={() => handleOpenScorecard(m.id)}
-                >
-                  <FileText size={15} /> Match Scorecard
-                </button>
+                {(() => {
+                  const parentSeries = seriesList.find((s) => s.id === m.seriesId);
+                  const pStatus = parentSeries?.status || 'Scheduled';
+                  const startAllowed = canStartMatch(m.status, pStatus);
+                  const liveAllowed = canLiveScore(m.status, pStatus) && canScoreLive;
+
+                  if (m.status === 'Scheduled') {
+                    return (
+                      <>
+                        <button
+                          className="btn btn-sm btn-success"
+                          style={{
+                            flex: 1,
+                            opacity: startAllowed ? 1 : 0.6,
+                            cursor: startAllowed ? 'pointer' : 'not-allowed',
+                          }}
+                          disabled={!startAllowed}
+                          title={
+                            !startAllowed
+                              ? 'Series has not started yet. Match cannot be started.'
+                              : 'Start match and launch live scoring'
+                          }
+                          onClick={() => handleStartMatch(m)}
+                        >
+                          <PlayCircle size={14} /> Start Match
+                        </button>
+                        <button
+                          className="btn btn-sm btn-secondary"
+                          onClick={() => {
+                            setModalTab('scorecard');
+                            handleOpenScorecard(m.id);
+                          }}
+                          title="View Scorecard"
+                        >
+                          <FileText size={14} />
+                        </button>
+                      </>
+                    );
+                  }
+
+                  if (m.status === 'InProgress') {
+                    return (
+                      <>
+                        <button
+                          className="btn btn-sm btn-primary"
+                          style={{
+                            flex: 1,
+                            opacity: liveAllowed ? 1 : 0.6,
+                            cursor: liveAllowed ? 'pointer' : 'not-allowed',
+                          }}
+                          disabled={!liveAllowed}
+                          title={
+                            pStatus !== 'InProgress'
+                              ? 'Series is not in progress. Live scoring is disabled.'
+                              : !canScoreLive
+                              ? 'Live scoring permission required'
+                              : 'Open live scoring console'
+                          }
+                          onClick={() => {
+                            setModalTab('live');
+                            handleOpenScorecard(m.id);
+                          }}
+                        >
+                          <Activity size={14} /> Live Scoring
+                        </button>
+                        <button
+                          className="btn btn-sm btn-secondary"
+                          onClick={() => {
+                            setModalTab('scorecard');
+                            handleOpenScorecard(m.id);
+                          }}
+                          title="View Scorecard"
+                        >
+                          <FileText size={14} />
+                        </button>
+                      </>
+                    );
+                  }
+
+                  // Completed, Cancelled, Abandoned
+                  return (
+                    <button
+                      className="btn btn-sm btn-secondary"
+                      style={{ flex: 1 }}
+                      onClick={() => {
+                        setModalTab('scorecard');
+                        handleOpenScorecard(m.id);
+                      }}
+                    >
+                      <FileText size={14} /> View Scorecard
+                    </button>
+                  );
+                })()}
+
                 {canManageMatches && (
                   <button
                     className="btn btn-sm btn-secondary"
@@ -1069,15 +1363,35 @@ export const Matches: React.FC<MatchesProps> = ({
               className="form-select"
               required
               value={matchFormData.seriesId}
-              onChange={(e) => setMatchFormData({ ...matchFormData, seriesId: Number(e.target.value) })}
+              disabled={Boolean(editingMatch)}
+              onChange={(e) => {
+                const newSeriesId = Number(e.target.value);
+                const sObj = seriesList.find((s) => s.id === newSeriesId);
+                const allowed = getAllowedMatchCreationStatuses(sObj?.status);
+                setMatchFormData({
+                  ...matchFormData,
+                  seriesId: newSeriesId,
+                  status: allowed.includes(matchFormData.status) ? matchFormData.status : (allowed[0] || 'Scheduled'),
+                });
+              }}
             >
               <option value={0}>-- Select Series --</option>
               {seriesList.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
+                <option
+                  key={s.id}
+                  value={s.id}
+                  disabled={!canAddMatchesToSeries(s.status) && editingMatch?.seriesId !== s.id}
+                  style={!canAddMatchesToSeries(s.status) ? { color: '#9ca3af', fontStyle: 'italic' } : {}}
+                >
+                  {s.name} {!canAddMatchesToSeries(s.status) ? `(${s.status} - Locked)` : `(${s.status})`}
                 </option>
               ))}
             </select>
+            {matchFormData.seriesId > 0 && !canAddMatchesToSeries(seriesList.find((s) => s.id === matchFormData.seriesId)?.status) && (
+              <small style={{ color: '#ef4444', marginTop: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <AlertCircle size={13} /> This series is completed or cancelled and cannot accept new matches.
+              </small>
+            )}
           </div>
 
           <div className="form-row">
@@ -1175,18 +1489,44 @@ export const Matches: React.FC<MatchesProps> = ({
           </div>
 
           <div className="form-group">
-            <label className="form-label">Status</label>
-            <select
-              className="form-select"
-              value={matchFormData.status}
-              onChange={(e) => setMatchFormData({ ...matchFormData, status: e.target.value })}
-            >
-              <option value="Scheduled">Scheduled</option>
-              <option value="InProgress">InProgress</option>
-              <option value="Completed">Completed</option>
-              <option value="Abandoned">Abandoned</option>
-              <option value="Cancelled">Cancelled</option>
-            </select>
+            <label className="form-label">
+              Status {(() => {
+                const parent = seriesList.find((s) => s.id === matchFormData.seriesId);
+                if (editingMatch && isMatchStatusLocked(editingMatch.status, parent?.status)) {
+                  return <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>(Locked)</span>;
+                }
+                return null;
+              })()}
+            </label>
+            {(() => {
+              const parent = seriesList.find((s) => s.id === matchFormData.seriesId);
+              const allowedStatuses = editingMatch
+                ? getAllowedMatchTransitions(editingMatch.status, parent?.status)
+                : getAllowedMatchCreationStatuses(parent?.status);
+              const locked = editingMatch ? isMatchStatusLocked(editingMatch.status, parent?.status) : false;
+
+              return (
+                <>
+                  <select
+                    className="form-select"
+                    value={matchFormData.status}
+                    disabled={locked}
+                    onChange={(e) => setMatchFormData({ ...matchFormData, status: e.target.value })}
+                  >
+                    {allowedStatuses.map((st) => (
+                      <option key={st} value={st}>
+                        {st}
+                      </option>
+                    ))}
+                  </select>
+                  {editingMatch && locked && (
+                    <small style={{ color: 'var(--text-muted)', marginTop: '0.35rem', display: 'block' }}>
+                      This match status is finalized or its series is completed/cancelled and cannot be changed.
+                    </small>
+                  )}
+                </>
+              );
+            })()}
           </div>
         </form>
       </Modal>
@@ -1253,6 +1593,40 @@ export const Matches: React.FC<MatchesProps> = ({
             {/* TAB 1: LIVE SCORING CONSOLE */}
             {modalTab === 'live' && (
               <div>
+                {/* Status Validation Warning Banner */}
+                {(() => {
+                  const modalSeries = seriesList.find((s) => s.id === activeLiveScore.match.seriesId);
+                  const pStatus = modalSeries?.status;
+                  const mStatus = activeLiveScore.match.status;
+                  const liveAllowed = canLiveScore(mStatus, pStatus);
+
+                  if (!liveAllowed) {
+                    let reason = 'Live scoring is disabled.';
+                    if (pStatus === 'Scheduled') {
+                      reason = 'This series is Scheduled. Live scoring cannot be started until the series status is InProgress.';
+                    } else if (pStatus === 'Completed') {
+                      reason = 'This series is Completed. Match scorecards are finalized and locked.';
+                    } else if (pStatus === 'Cancelled') {
+                      reason = 'This series has been Cancelled. Live scoring is not allowed.';
+                    } else if (mStatus === 'Scheduled') {
+                      reason = 'This match is Scheduled. Live scoring cannot be performed until match status is changed to InProgress.';
+                    } else if (mStatus === 'Completed' || mStatus === 'Cancelled' || mStatus === 'Abandoned') {
+                      reason = `This match is ${mStatus}. Scorecard is locked and live scoring is closed.`;
+                    }
+
+                    return (
+                      <div
+                        className="alert alert-warning"
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}
+                      >
+                        <Lock size={16} />
+                        <span>{reason}</span>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+
                 {/* Innings Selector Bar */}
                 <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
                   <button
@@ -1387,7 +1761,14 @@ export const Matches: React.FC<MatchesProps> = ({
                       className="btn btn-primary"
                       style={{ width: '100%', padding: '0.85rem' }}
                       onClick={handleStartInnings}
-                      disabled={actionLoading || setupStrikerId === 0 || setupNonStrikerId === 0 || setupBowlerId === 0}
+                      disabled={
+                        actionLoading ||
+                        setupStrikerId === 0 ||
+                        setupNonStrikerId === 0 ||
+                        setupBowlerId === 0 ||
+                        !canLiveScore(activeLiveScore.match.status, seriesList.find((s) => s.id === activeLiveScore.match.seriesId)?.status) ||
+                        !canScoreLive
+                      }
                     >
                       <PlayCircle size={18} /> {actionLoading ? 'Starting...' : 'Start Live Scoring'}
                     </button>
@@ -1833,7 +2214,7 @@ export const Matches: React.FC<MatchesProps> = ({
                       </div>
                     )}
 
-                    {canScoreLive ? (
+                    {canScoreLive && canLiveScore(activeLiveScore.match.status, seriesList.find((s) => s.id === activeLiveScore.match.seriesId)?.status) ? (
                       currentInnings?.status === 'Completed' || activeLiveScore?.isMatchComplete || currentInnings?.chasingStatus?.isTargetChased ? (
                         <div
                           style={{
@@ -2030,7 +2411,11 @@ export const Matches: React.FC<MatchesProps> = ({
                         }}
                       >
                         <Activity size={16} />
-                        <span>Live Score Viewing Mode — Ball-by-ball scoring controls are restricted to Umpires and Administrators.</span>
+                        <span>
+                          {!canLiveScore(activeLiveScore.match.status, seriesList.find((s) => s.id === activeLiveScore.match.seriesId)?.status)
+                            ? 'Live scoring is locked. Live scoring is only permitted when both the Series and Match are InProgress.'
+                            : 'Live Score Viewing Mode — Ball-by-ball scoring controls are restricted to Umpires and Administrators.'}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -2398,7 +2783,7 @@ export const Matches: React.FC<MatchesProps> = ({
                   </div>
                 </div>
 
-                {canScoreLive ? (
+                {canScoreLive && !isMatchStatusLocked(activeLiveScore.match.status, seriesList.find((s) => s.id === activeLiveScore.match.seriesId)?.status) ? (
                   <button
                     className="btn btn-primary"
                     onClick={handleSaveOutcome}
@@ -2408,7 +2793,9 @@ export const Matches: React.FC<MatchesProps> = ({
                   </button>
                 ) : (
                   <div style={{ textAlign: 'center', padding: '0.85rem', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                    Match outcome can only be finalized with live scoring permission.
+                    {isMatchStatusLocked(activeLiveScore.match.status, seriesList.find((s) => s.id === activeLiveScore.match.seriesId)?.status)
+                      ? 'Match outcome has been finalized. Scorecard is locked.'
+                      : 'Match outcome can only be finalized with live scoring permission.'}
                   </div>
                 )}
               </div>

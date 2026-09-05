@@ -591,13 +591,39 @@ public class LiveScoringService : ILiveScoringService
         };
     }
 
+    private static void EnsureLiveScoringAllowed(Match match)
+    {
+        if (!string.Equals(match.Status, "InProgress", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"Live scoring is only allowed when match is InProgress. Current match status is '{match.Status}'.");
+        }
+
+        if (match.Series == null || !string.Equals(match.Series.Status, "InProgress", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"Live scoring is only allowed when series is InProgress. Current series status is '{match.Series?.Status}'.");
+        }
+    }
+
     public async Task<LiveScoreDto?> StartInningsAsync(int matchId, StartInningsRequest req)
     {
         var match = await _context.Matches
+            .Include(m => m.Series)
             .Include(m => m.Innings)
             .FirstOrDefaultAsync(m => m.Id == matchId);
 
         if (match == null) return null;
+
+        if (match.Series == null || !string.Equals(match.Series.Status, "InProgress", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Cannot start innings: series must be InProgress.");
+        }
+
+        if (string.Equals(match.Status, "Completed", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(match.Status, "Cancelled", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(match.Status, "Abandoned", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"Cannot start innings on a {match.Status.ToLower()} match.");
+        }
 
         if (req.StrikerPlayerId == req.NonStrikerPlayerId)
         {
@@ -643,6 +669,7 @@ public class LiveScoringService : ILiveScoringService
     public async Task<LiveScoreDto?> RecordBallAsync(int matchId, int inningsId, RecordBallRequest req)
     {
         var match = await _context.Matches
+            .Include(m => m.Series)
             .Include(m => m.Innings)
                 .ThenInclude(i => i.Team)
             .Include(m => m.Team1)
@@ -650,6 +677,7 @@ public class LiveScoringService : ILiveScoringService
             .FirstOrDefaultAsync(m => m.Id == matchId);
 
         if (match == null) return null;
+        EnsureLiveScoringAllowed(match);
 
         var inn = await _context.MatchInnings
             .Include(i => i.BallEvents)
@@ -790,6 +818,7 @@ public class LiveScoringService : ILiveScoringService
     public async Task<LiveScoreDto?> RecordWicketAsync(int matchId, int inningsId, RecordWicketRequest req)
     {
         var match = await _context.Matches
+            .Include(m => m.Series)
             .Include(m => m.Innings)
                 .ThenInclude(i => i.Team)
             .Include(m => m.Team1)
@@ -797,6 +826,7 @@ public class LiveScoringService : ILiveScoringService
             .FirstOrDefaultAsync(m => m.Id == matchId);
 
         if (match == null) return null;
+        EnsureLiveScoringAllowed(match);
 
         var inn = await _context.MatchInnings
             .Include(i => i.BallEvents)
@@ -886,6 +916,13 @@ public class LiveScoringService : ILiveScoringService
 
     public async Task<LiveScoreDto?> SelectNewBatsmanAsync(int matchId, int inningsId, SelectNewBatsmanRequest req)
     {
+        var match = await _context.Matches
+            .Include(m => m.Series)
+            .FirstOrDefaultAsync(m => m.Id == matchId);
+
+        if (match == null) return null;
+        EnsureLiveScoringAllowed(match);
+
         var inn = await _context.MatchInnings
             .Include(i => i.BallEvents)
             .FirstOrDefaultAsync(i => i.Id == inningsId && i.MatchId == matchId);
@@ -925,6 +962,13 @@ public class LiveScoringService : ILiveScoringService
 
     public async Task<LiveScoreDto?> NextOverAsync(int matchId, int inningsId, NextOverRequest req)
     {
+        var match = await _context.Matches
+            .Include(m => m.Series)
+            .FirstOrDefaultAsync(m => m.Id == matchId);
+
+        if (match == null) return null;
+        EnsureLiveScoringAllowed(match);
+
         var inn = await _context.MatchInnings
             .Include(i => i.Match)
             .Include(i => i.CurrentBowler)
@@ -950,7 +994,7 @@ public class LiveScoringService : ILiveScoringService
 
         if (lastBallEvent != null && lastBallEvent.BowlerPlayerId == req.NextBowlerPlayerId)
         {
-            throw new InvalidOperationException("Consecutive overs by the same bowler are not allowed.");
+            throw new InvalidOperationException("The same bowler cannot bowl two consecutive overs.");
         }
 
         // Idempotent safety: if bowler is already set to the requested bowler, simply return current state
@@ -959,32 +1003,29 @@ public class LiveScoringService : ILiveScoringService
             return await GetLiveScoreAsync(matchId);
         }
 
-        var nextBowler = await _context.Players.FindAsync(req.NextBowlerPlayerId);
-        if (nextBowler == null)
-        {
-            throw new InvalidOperationException("Selected bowler not found.");
-        }
-
-        // Validate bowler belongs to the bowling team if roster exists
-        int bowlingTeamId = inn.Match != null
-            ? (inn.Match.Team1Id == inn.TeamId ? inn.Match.Team2Id : inn.Match.Team1Id)
-            : 0;
-
+        int bowlingTeamId = match.Team1Id == inn.TeamId ? match.Team2Id : match.Team1Id;
         if (bowlingTeamId > 0)
         {
             bool hasRoster = await _context.TeamPlayers.AnyAsync(tp => tp.TeamId == bowlingTeamId && tp.Status == "Active");
             if (hasRoster)
             {
-                bool belongsToBowlingTeam = await _context.TeamPlayers.AnyAsync(tp => tp.TeamId == bowlingTeamId && tp.PlayerId == req.NextBowlerPlayerId && tp.Status == "Active");
-                if (!belongsToBowlingTeam)
+                bool belongs = await _context.TeamPlayers.AnyAsync(tp => tp.TeamId == bowlingTeamId && tp.PlayerId == req.NextBowlerPlayerId && tp.Status == "Active");
+                if (!belongs)
                 {
                     throw new InvalidOperationException("Selected bowler does not belong to the bowling team.");
                 }
             }
         }
 
+        var nextBowler = await _context.Players.FindAsync(req.NextBowlerPlayerId);
+        if (nextBowler == null)
+        {
+            throw new InvalidOperationException("Selected bowler was not found.");
+        }
+
         inn.CurrentBowlerId = nextBowler.Id;
         inn.CurrentBowler = nextBowler;
+        match.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
 
         return await GetLiveScoreAsync(matchId);
@@ -993,6 +1034,7 @@ public class LiveScoringService : ILiveScoringService
     public async Task<LiveScoreDto?> CompleteInningsAsync(int matchId, int inningsId)
     {
         var match = await _context.Matches
+            .Include(m => m.Series)
             .Include(m => m.Innings)
                 .ThenInclude(i => i.Team)
             .Include(m => m.Team1)
@@ -1000,6 +1042,7 @@ public class LiveScoringService : ILiveScoringService
             .FirstOrDefaultAsync(m => m.Id == matchId);
 
         if (match == null) return null;
+        EnsureLiveScoringAllowed(match);
 
         var inn = match.Innings.FirstOrDefault(i => i.Id == inningsId);
         if (inn == null) return null;
@@ -1050,6 +1093,7 @@ public class LiveScoringService : ILiveScoringService
     public async Task<LiveScoreDto?> CompleteMatchAsync(int matchId, CompleteMatchRequest req)
     {
         var match = await _context.Matches
+            .Include(m => m.Series)
             .Include(m => m.Innings)
                 .ThenInclude(i => i.BattingPerformances)
                     .ThenInclude(bp => bp.Player)
@@ -1063,6 +1107,11 @@ public class LiveScoringService : ILiveScoringService
             .FirstOrDefaultAsync(m => m.Id == matchId);
 
         if (match == null) return null;
+
+        if (!string.Equals(match.Status, "InProgress", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"Cannot complete match: current match status is '{match.Status}'. Match must be 'InProgress'.");
+        }
 
         foreach (var inn in match.Innings)
         {
@@ -1507,14 +1556,12 @@ public class LiveScoringService : ILiveScoringService
     public async Task<LiveScoreDto?> ChangeSelectedBowlerAsync(int matchId, int inningsId, ChangeBowlerRequest req)
     {
         var match = await _context.Matches
+            .Include(m => m.Series)
             .Include(m => m.Innings)
             .FirstOrDefaultAsync(m => m.Id == matchId);
 
         if (match == null) return null;
-        if (match.Status == "Completed" || match.Status == "Cancelled")
-        {
-            throw new InvalidOperationException("Match is already completed or cancelled.");
-        }
+        EnsureLiveScoringAllowed(match);
 
         var inn = match.Innings.FirstOrDefault(i => i.Id == inningsId);
         if (inn == null) return null;
@@ -1595,14 +1642,12 @@ public class LiveScoringService : ILiveScoringService
     public async Task<LiveScoreDto?> ReplaceBowlerForRemainingOverAsync(int matchId, int inningsId, ReplaceBowlerRequest req)
     {
         var match = await _context.Matches
+            .Include(m => m.Series)
             .Include(m => m.Innings)
             .FirstOrDefaultAsync(m => m.Id == matchId);
 
         if (match == null) return null;
-        if (match.Status == "Completed" || match.Status == "Cancelled")
-        {
-            throw new InvalidOperationException("Match is already completed or cancelled.");
-        }
+        EnsureLiveScoringAllowed(match);
 
         var inn = match.Innings.FirstOrDefault(i => i.Id == inningsId);
         if (inn == null) return null;

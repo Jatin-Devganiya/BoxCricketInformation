@@ -73,20 +73,42 @@ public class TeamsController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(req.Name) || string.IsNullOrWhiteSpace(req.ShortName))
         {
-            return BadRequest(new { message = "Team name and short name are required." });
+            return BadRequest(new { success = false, message = "Team name and short name are required." });
+        }
+
+        var trimmedName = req.Name.Trim();
+        var teamStatus = string.IsNullOrWhiteSpace(req.Status) ? "Active" : req.Status.Trim();
+
+        if (teamStatus.Equals("Active", StringComparison.OrdinalIgnoreCase))
+        {
+            var isDuplicate = await _context.Teams.AnyAsync(t =>
+                t.Status == "Active" &&
+                t.Name.ToLower() == trimmedName.ToLower());
+
+            if (isDuplicate)
+            {
+                return BadRequest(new { success = false, message = "Team name already exists." });
+            }
         }
 
         var team = new Team
         {
-            Name = req.Name.Trim(),
+            Name = trimmedName,
             ShortName = req.ShortName.Trim().ToUpper(),
-            Status = string.IsNullOrWhiteSpace(req.Status) ? "Active" : req.Status,
+            Status = teamStatus,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
 
-        await _context.Teams.AddAsync(team);
-        await _context.SaveChangesAsync();
+        try
+        {
+            await _context.Teams.AddAsync(team);
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (ex.GetBaseException() is Microsoft.Data.SqlClient.SqlException sqlEx && (sqlEx.Number == 2601 || sqlEx.Number == 2627))
+        {
+            return BadRequest(new { success = false, message = "Team name already exists." });
+        }
 
         return CreatedAtAction(nameof(GetTeamById), new { id = team.Id }, new TeamDto
         {
@@ -102,15 +124,43 @@ public class TeamsController : ControllerBase
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateTeam(int id, [FromBody] UpdateTeamRequest req)
     {
-        var team = await _context.Teams.FindAsync(id);
-        if (team == null) return NotFound(new { message = "Team not found." });
+        if (string.IsNullOrWhiteSpace(req.Name) || string.IsNullOrWhiteSpace(req.ShortName))
+        {
+            return BadRequest(new { success = false, message = "Team name and short name are required." });
+        }
 
-        team.Name = req.Name.Trim();
+        var team = await _context.Teams.FindAsync(id);
+        if (team == null) return NotFound(new { success = false, message = "Team not found." });
+
+        var trimmedName = req.Name.Trim();
+        var targetStatus = string.IsNullOrWhiteSpace(req.Status) ? team.Status : req.Status.Trim();
+
+        if (targetStatus.Equals("Active", StringComparison.OrdinalIgnoreCase))
+        {
+            var isDuplicate = await _context.Teams.AnyAsync(t =>
+                t.Id != id &&
+                t.Status == "Active" &&
+                t.Name.ToLower() == trimmedName.ToLower());
+
+            if (isDuplicate)
+            {
+                return BadRequest(new { success = false, message = "Team name already exists." });
+            }
+        }
+
+        team.Name = trimmedName;
         team.ShortName = req.ShortName.Trim().ToUpper();
-        team.Status = req.Status;
+        team.Status = targetStatus;
         team.UpdatedAt = DateTime.UtcNow;
 
-        await _context.SaveChangesAsync();
+        try
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (ex.GetBaseException() is Microsoft.Data.SqlClient.SqlException sqlEx && (sqlEx.Number == 2601 || sqlEx.Number == 2627))
+        {
+            return BadRequest(new { success = false, message = "Team name already exists." });
+        }
 
         return Ok(new TeamDto
         {

@@ -16,12 +16,18 @@ public class MatchesController : ControllerBase
     private readonly CricketDbContext _context;
     private readonly IScorecardService _scorecardService;
     private readonly ILiveScoringService _liveScoringService;
+    private readonly IStatusValidationService _statusValidationService;
 
-    public MatchesController(CricketDbContext context, IScorecardService scorecardService, ILiveScoringService liveScoringService)
+    public MatchesController(
+        CricketDbContext context,
+        IScorecardService scorecardService,
+        ILiveScoringService liveScoringService,
+        IStatusValidationService statusValidationService)
     {
         _context = context;
         _scorecardService = scorecardService;
         _liveScoringService = liveScoringService;
+        _statusValidationService = statusValidationService;
     }
 
     [HttpGet]
@@ -190,6 +196,12 @@ public class MatchesController : ControllerBase
         var series = await _context.Series.FindAsync(req.SeriesId);
         if (series == null) return BadRequest(new { message = "Selected series does not exist." });
 
+        var createValidation = _statusValidationService.ValidateMatchCreation(series, req.Status);
+        if (!createValidation.IsValid)
+        {
+            return BadRequest(new { message = createValidation.ErrorMessage });
+        }
+
         var team1 = await _context.Teams.FindAsync(req.Team1Id);
         var team2 = await _context.Teams.FindAsync(req.Team2Id);
         if (team1 == null || team2 == null)
@@ -207,7 +219,7 @@ public class MatchesController : ControllerBase
             ScheduledDate = req.ScheduledDate.Date,
             ScheduledTime = string.IsNullOrWhiteSpace(req.ScheduledTime) ? "18:00" : req.ScheduledTime.Trim(),
             Address = req.Address?.Trim() ?? string.Empty,
-            Status = string.IsNullOrWhiteSpace(req.Status) ? "Scheduled" : req.Status,
+            Status = string.IsNullOrWhiteSpace(req.Status) ? "Scheduled" : req.Status.Trim(),
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -244,8 +256,24 @@ public class MatchesController : ControllerBase
             return BadRequest(new { message = "Team 1 and Team 2 must be different teams." });
         }
 
-        var match = await _context.Matches.FindAsync(id);
+        var match = await _context.Matches
+            .Include(m => m.Innings)
+                .ThenInclude(i => i.BattingPerformances)
+            .Include(m => m.Innings)
+                .ThenInclude(i => i.BowlingPerformances)
+            .Include(m => m.Innings)
+                .ThenInclude(i => i.BallEvents)
+            .FirstOrDefaultAsync(m => m.Id == id);
         if (match == null) return NotFound(new { message = "Match not found." });
+
+        var targetSeries = await _context.Series.FindAsync(req.SeriesId);
+        if (targetSeries == null) return BadRequest(new { message = "Selected series does not exist." });
+
+        var updateValidation = _statusValidationService.ValidateMatchStatusTransition(match, targetSeries, req.Status);
+        if (!updateValidation.IsValid)
+        {
+            return BadRequest(new { message = updateValidation.ErrorMessage });
+        }
 
         match.SeriesId = req.SeriesId;
         match.Team1Id = req.Team1Id;
@@ -255,7 +283,7 @@ public class MatchesController : ControllerBase
         match.ScheduledDate = req.ScheduledDate.Date;
         match.ScheduledTime = req.ScheduledTime;
         match.Address = req.Address;
-        match.Status = req.Status;
+        match.Status = req.Status.Trim();
         match.WinningTeamId = req.WinningTeamId;
         match.Result = req.Result;
         match.MOMPlayerId = req.MOMPlayerId;
@@ -270,12 +298,13 @@ public class MatchesController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteMatch(int id)
     {
-        var match = await _context.Matches.FindAsync(id);
+        var match = await _context.Matches.Include(m => m.Series).FirstOrDefaultAsync(m => m.Id == id);
         if (match == null) return NotFound(new { message = "Match not found." });
 
-        if (!string.Equals(match.Status, "Scheduled", StringComparison.OrdinalIgnoreCase))
+        var cancelValidation = _statusValidationService.ValidateMatchCancellation(match, match.Series);
+        if (!cancelValidation.IsValid)
         {
-            return BadRequest(new { message = "Only matches with 'Scheduled' status can be deleted." });
+            return BadRequest(new { message = cancelValidation.ErrorMessage });
         }
 
         // Soft delete / cancel
@@ -300,6 +329,26 @@ public class MatchesController : ControllerBase
     [HttpPut("{id}/scorecard")]
     public async Task<IActionResult> SaveScorecard(int id, [FromBody] SaveScorecardRequest req)
     {
+        var match = await _context.Matches
+            .Include(m => m.Series)
+            .Include(m => m.Innings)
+                .ThenInclude(i => i.BattingPerformances)
+            .Include(m => m.Innings)
+                .ThenInclude(i => i.BowlingPerformances)
+            .Include(m => m.Innings)
+                .ThenInclude(i => i.BallEvents)
+            .FirstOrDefaultAsync(m => m.Id == id);
+        if (match == null) return NotFound(new { message = "Match not found." });
+
+        if (!string.IsNullOrWhiteSpace(req.Status))
+        {
+            var statusValidation = _statusValidationService.ValidateMatchStatusTransition(match, match.Series, req.Status);
+            if (!statusValidation.IsValid)
+            {
+                return BadRequest(new { message = statusValidation.ErrorMessage });
+            }
+        }
+
         var result = await _scorecardService.SaveScorecardAsync(id, req);
         if (result == null) return NotFound(new { message = "Match not found." });
 
@@ -323,6 +372,15 @@ public class MatchesController : ControllerBase
     [HttpPost("{id}/innings/start")]
     public async Task<IActionResult> StartInnings(int id, [FromBody] StartInningsRequest req)
     {
+        var match = await _context.Matches.Include(m => m.Series).FirstOrDefaultAsync(m => m.Id == id);
+        if (match == null) return NotFound(new { message = "Match not found." });
+
+        var transitionValidation = _statusValidationService.ValidateMatchStatusTransition(match, match.Series, "InProgress");
+        if (!transitionValidation.IsValid)
+        {
+            return BadRequest(new { message = transitionValidation.ErrorMessage });
+        }
+
         try
         {
             var result = await _liveScoringService.StartInningsAsync(id, req);
@@ -339,6 +397,15 @@ public class MatchesController : ControllerBase
     [HttpPost("{id}/innings/{inningsId}/ball")]
     public async Task<IActionResult> RecordBall(int id, int inningsId, [FromBody] RecordBallRequest req)
     {
+        var match = await _context.Matches.Include(m => m.Series).FirstOrDefaultAsync(m => m.Id == id);
+        if (match == null) return NotFound(new { message = "Match not found." });
+
+        var scoringValidation = _statusValidationService.ValidateLiveScoringAllowed(match, match.Series);
+        if (!scoringValidation.IsValid)
+        {
+            return BadRequest(new { message = scoringValidation.ErrorMessage });
+        }
+
         try
         {
             var result = await _liveScoringService.RecordBallAsync(id, inningsId, req);
@@ -355,6 +422,15 @@ public class MatchesController : ControllerBase
     [HttpPost("{id}/innings/{inningsId}/wicket")]
     public async Task<IActionResult> RecordWicket(int id, int inningsId, [FromBody] RecordWicketRequest req)
     {
+        var match = await _context.Matches.Include(m => m.Series).FirstOrDefaultAsync(m => m.Id == id);
+        if (match == null) return NotFound(new { message = "Match not found." });
+
+        var scoringValidation = _statusValidationService.ValidateLiveScoringAllowed(match, match.Series);
+        if (!scoringValidation.IsValid)
+        {
+            return BadRequest(new { message = scoringValidation.ErrorMessage });
+        }
+
         try
         {
             var result = await _liveScoringService.RecordWicketAsync(id, inningsId, req);
@@ -371,6 +447,15 @@ public class MatchesController : ControllerBase
     [HttpPost("{id}/innings/{inningsId}/new-batsman")]
     public async Task<IActionResult> SelectNewBatsman(int id, int inningsId, [FromBody] SelectNewBatsmanRequest req)
     {
+        var match = await _context.Matches.Include(m => m.Series).FirstOrDefaultAsync(m => m.Id == id);
+        if (match == null) return NotFound(new { message = "Match not found." });
+
+        var scoringValidation = _statusValidationService.ValidateLiveScoringAllowed(match, match.Series);
+        if (!scoringValidation.IsValid)
+        {
+            return BadRequest(new { message = scoringValidation.ErrorMessage });
+        }
+
         try
         {
             var result = await _liveScoringService.SelectNewBatsmanAsync(id, inningsId, req);
@@ -387,6 +472,15 @@ public class MatchesController : ControllerBase
     [HttpPost("{id}/innings/{inningsId}/next-over")]
     public async Task<IActionResult> NextOver(int id, int inningsId, [FromBody] NextOverRequest req)
     {
+        var match = await _context.Matches.Include(m => m.Series).FirstOrDefaultAsync(m => m.Id == id);
+        if (match == null) return NotFound(new { message = "Match not found." });
+
+        var scoringValidation = _statusValidationService.ValidateLiveScoringAllowed(match, match.Series);
+        if (!scoringValidation.IsValid)
+        {
+            return BadRequest(new { message = scoringValidation.ErrorMessage });
+        }
+
         try
         {
             var result = await _liveScoringService.NextOverAsync(id, inningsId, req);
@@ -403,6 +497,15 @@ public class MatchesController : ControllerBase
     [HttpPost("{id}/innings/{inningsId}/complete")]
     public async Task<IActionResult> CompleteInnings(int id, int inningsId)
     {
+        var match = await _context.Matches.Include(m => m.Series).FirstOrDefaultAsync(m => m.Id == id);
+        if (match == null) return NotFound(new { message = "Match not found." });
+
+        var scoringValidation = _statusValidationService.ValidateLiveScoringAllowed(match, match.Series);
+        if (!scoringValidation.IsValid)
+        {
+            return BadRequest(new { message = scoringValidation.ErrorMessage });
+        }
+
         var result = await _liveScoringService.CompleteInningsAsync(id, inningsId);
         if (result == null) return NotFound(new { message = "Match or Innings not found." });
         return Ok(result);
@@ -412,6 +515,23 @@ public class MatchesController : ControllerBase
     [HttpPost("{id}/complete")]
     public async Task<IActionResult> CompleteMatch(int id, [FromBody] CompleteMatchRequest req)
     {
+        var match = await _context.Matches
+            .Include(m => m.Series)
+            .Include(m => m.Innings)
+                .ThenInclude(i => i.BattingPerformances)
+            .Include(m => m.Innings)
+                .ThenInclude(i => i.BowlingPerformances)
+            .Include(m => m.Innings)
+                .ThenInclude(i => i.BallEvents)
+            .FirstOrDefaultAsync(m => m.Id == id);
+        if (match == null) return NotFound(new { message = "Match not found." });
+
+        var completeValidation = _statusValidationService.ValidateMatchStatusTransition(match, match.Series, "Completed");
+        if (!completeValidation.IsValid)
+        {
+            return BadRequest(new { message = completeValidation.ErrorMessage });
+        }
+
         var result = await _liveScoringService.CompleteMatchAsync(id, req);
         if (result == null) return NotFound(new { message = "Match not found." });
         return Ok(result);
@@ -430,6 +550,15 @@ public class MatchesController : ControllerBase
     [HttpPost("{id}/innings/{inningsId}/change-bowler")]
     public async Task<IActionResult> ChangeSelectedBowler(int id, int inningsId, [FromBody] ChangeBowlerRequest req)
     {
+        var match = await _context.Matches.Include(m => m.Series).FirstOrDefaultAsync(m => m.Id == id);
+        if (match == null) return NotFound(new { message = "Match not found." });
+
+        var scoringValidation = _statusValidationService.ValidateLiveScoringAllowed(match, match.Series);
+        if (!scoringValidation.IsValid)
+        {
+            return BadRequest(new { message = scoringValidation.ErrorMessage });
+        }
+
         try
         {
             var result = await _liveScoringService.ChangeSelectedBowlerAsync(id, inningsId, req);
@@ -446,6 +575,15 @@ public class MatchesController : ControllerBase
     [HttpPost("{id}/innings/{inningsId}/replace-bowler-in-over")]
     public async Task<IActionResult> ReplaceBowlerForRemainingOver(int id, int inningsId, [FromBody] ReplaceBowlerRequest req)
     {
+        var match = await _context.Matches.Include(m => m.Series).FirstOrDefaultAsync(m => m.Id == id);
+        if (match == null) return NotFound(new { message = "Match not found." });
+
+        var scoringValidation = _statusValidationService.ValidateLiveScoringAllowed(match, match.Series);
+        if (!scoringValidation.IsValid)
+        {
+            return BadRequest(new { message = scoringValidation.ErrorMessage });
+        }
+
         try
         {
             var result = await _liveScoringService.ReplaceBowlerForRemainingOverAsync(id, inningsId, req);

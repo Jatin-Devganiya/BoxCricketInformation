@@ -91,6 +91,10 @@ public class CricketDbContext : DbContext
                   .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasIndex(p => p.LastName);
+            entity.HasIndex(p => new { p.FirstName, p.LastName })
+                  .HasDatabaseName("IX_Players_FirstName_LastName_Active")
+                  .HasFilter("[Status] = 'Active'")
+                  .IsUnique();
         });
 
         // Team
@@ -100,7 +104,10 @@ public class CricketDbContext : DbContext
             entity.Property(t => t.Name).HasMaxLength(100).IsRequired();
             entity.Property(t => t.ShortName).HasMaxLength(10).IsRequired();
             entity.Property(t => t.Status).HasMaxLength(20).HasDefaultValue("Active");
-            entity.HasIndex(t => t.Name);
+            entity.HasIndex(t => t.Name)
+                  .HasDatabaseName("IX_Teams_Name_Active")
+                  .HasFilter("[Status] = 'Active'")
+                  .IsUnique();
         });
 
         // TeamPlayer
@@ -128,6 +135,10 @@ public class CricketDbContext : DbContext
             entity.Property(s => s.Name).HasMaxLength(150).IsRequired();
             entity.Property(s => s.Status).HasMaxLength(20).HasDefaultValue("Scheduled");
             entity.HasIndex(s => s.StartDate);
+            entity.HasIndex(s => s.Name)
+                  .HasDatabaseName("IX_Series_Name_Active")
+                  .HasFilter("[Status] <> 'Cancelled'")
+                  .IsUnique();
         });
 
         // Match
