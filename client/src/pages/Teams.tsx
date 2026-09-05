@@ -11,13 +11,39 @@ import {
   Trash2,
   UserPlus,
   X,
-  AlertCircle
+  AlertCircle,
+  Search,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronFirst,
+  ChevronLast
 } from 'lucide-react';
 
 export const Teams: React.FC = () => {
   const { canManageTeams } = useAuth();
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+
+  // Filters
+  const [search, setSearch] = useState<string>('');
+  const [status, setStatus] = useState<string>('');
+
+  // Sorting
+  type SortField = 'name' | 'shortCode' | 'players' | 'status';
+  const [sortField, setSortField] = useState<SortField>('name');
+  const [sortAsc, setSortAsc] = useState<boolean>(true);
+
+  // Pagination (Default 100)
+  const [pageSize, setPageSize] = useState<number>(100);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+
+  // Reset page when filters or sort change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, status, sortField, sortAsc, pageSize]);
 
   // Roster Modal
   const [rosterModalOpen, setRosterModalOpen] = useState<boolean>(false);
@@ -48,6 +74,83 @@ export const Teams: React.FC = () => {
   useEffect(() => {
     fetchTeams();
   }, []);
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortAsc(!sortAsc);
+    } else {
+      setSortField(field);
+      setSortAsc(field === 'players' ? false : true);
+    }
+  };
+
+  const renderSortIndicator = (field: SortField) => {
+    if (sortField !== field) {
+      return <ArrowUpDown size={13} style={{ opacity: 0.3, marginLeft: '0.35rem', verticalAlign: 'middle' }} />;
+    }
+    return sortAsc ? (
+      <ArrowUp size={13} style={{ color: '#10b981', marginLeft: '0.35rem', verticalAlign: 'middle' }} />
+    ) : (
+      <ArrowDown size={13} style={{ color: '#10b981', marginLeft: '0.35rem', verticalAlign: 'middle' }} />
+    );
+  };
+
+  const filteredTeams = teams.filter((t) => {
+    if (search.trim()) {
+      const q = search.toLowerCase().trim();
+      const matchName = t.name.toLowerCase().includes(q);
+      const matchCode = t.shortName.toLowerCase().includes(q);
+      if (!matchName && !matchCode) return false;
+    }
+    if (status && t.status.toLowerCase() !== status.toLowerCase()) {
+      return false;
+    }
+    return true;
+  });
+
+  const sortedTeams = [...filteredTeams].sort((a, b) => {
+    if (sortField === 'name') {
+      return sortAsc ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
+    }
+    if (sortField === 'shortCode') {
+      return sortAsc ? a.shortName.localeCompare(b.shortName) : b.shortName.localeCompare(a.shortName);
+    }
+    if (sortField === 'players') {
+      const diff = a.playerCount - b.playerCount;
+      if (diff !== 0) return sortAsc ? diff : -diff;
+      return a.name.localeCompare(b.name);
+    }
+    if (sortField === 'status') {
+      return sortAsc ? a.status.localeCompare(b.status) : b.status.localeCompare(a.status);
+    }
+    return sortAsc ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
+  });
+
+  // Pagination calculations
+  const totalTeams = sortedTeams.length;
+  const totalPages = Math.max(1, Math.ceil(totalTeams / pageSize));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const startIndex = totalTeams === 0 ? 0 : (safeCurrentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, totalTeams);
+  const paginatedTeams = sortedTeams.slice(startIndex, endIndex);
+
+  const getPageNumbers = () => {
+    const pages: (number | string)[] = [];
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      if (safeCurrentPage > 3) pages.push('...');
+      const start = Math.max(2, safeCurrentPage - 1);
+      const end = Math.min(totalPages - 1, safeCurrentPage + 1);
+      for (let i = start; i <= end; i++) {
+        pages.push(i);
+      }
+      if (safeCurrentPage < totalPages - 2) pages.push('...');
+      pages.push(totalPages);
+    }
+    return pages;
+  };
 
   const handleOpenRoster = async (team: Team) => {
     try {
@@ -143,7 +246,8 @@ export const Teams: React.FC = () => {
 
   return (
     <div>
-      <div className="filter-bar">
+      {/* Header & Add Button */}
+      <div className="filter-bar" style={{ marginBottom: '1rem' }}>
         <div>
           <h2 style={{ fontSize: '1.1rem', fontWeight: 600 }}>Registered Teams</h2>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Manage box cricket teams and team rosters</p>
@@ -155,15 +259,78 @@ export const Teams: React.FC = () => {
         )}
       </div>
 
+      {/* Search & Filter Bar */}
+      <div className="filter-bar" style={{ marginBottom: '1.25rem' }}>
+        <div className="search-input-wrap">
+          <Search size={18} />
+          <input
+            type="text"
+            className="form-input"
+            placeholder="Search teams by name or short code..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <select
+            className="form-select"
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            style={{ width: '140px' }}
+          >
+            <option value="">All Status</option>
+            <option value="Active">Active</option>
+            <option value="Inactive">Inactive</option>
+          </select>
+        </div>
+      </div>
+
       <div className="card">
         <div className="table-container">
           <table className="custom-table">
             <thead>
               <tr>
-                <th>Team Name</th>
-                <th>Short Code</th>
-                <th>Active Players</th>
-                <th>Status</th>
+                <th
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => handleSort('name')}
+                  title="Team Name - Click to sort"
+                >
+                  <div style={{ display: 'inline-flex', alignItems: 'center' }}>
+                    Team Name
+                    {renderSortIndicator('name')}
+                  </div>
+                </th>
+                <th
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => handleSort('shortCode')}
+                  title="Short Code - Click to sort"
+                >
+                  <div style={{ display: 'inline-flex', alignItems: 'center' }}>
+                    Short Code
+                    {renderSortIndicator('shortCode')}
+                  </div>
+                </th>
+                <th
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => handleSort('players')}
+                  title="Active Players - Click to sort"
+                >
+                  <div style={{ display: 'inline-flex', alignItems: 'center' }}>
+                    Active Players
+                    {renderSortIndicator('players')}
+                  </div>
+                </th>
+                <th
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => handleSort('status')}
+                  title="Status - Click to sort"
+                >
+                  <div style={{ display: 'inline-flex', alignItems: 'center' }}>
+                    Status
+                    {renderSortIndicator('status')}
+                  </div>
+                </th>
                 <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
@@ -174,14 +341,14 @@ export const Teams: React.FC = () => {
                     Loading teams...
                   </td>
                 </tr>
-              ) : teams.length === 0 ? (
+              ) : paginatedTeams.length === 0 ? (
                 <tr>
                   <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
-                    No teams found.
+                    No teams found matching your criteria.
                   </td>
                 </tr>
               ) : (
-                teams.map((team) => (
+                paginatedTeams.map((team) => (
                   <tr key={team.id}>
                     <td style={{ fontWeight: 600 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
@@ -236,6 +403,165 @@ export const Teams: React.FC = () => {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Pagination Controls */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginTop: '1.25rem',
+            paddingTop: '1rem',
+            borderTop: '1px solid rgba(255, 255, 255, 0.07)',
+            flexWrap: 'wrap',
+            gap: '1rem',
+          }}
+        >
+          {/* Left: Summary & Rows Per Page */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+              Showing{' '}
+              <strong style={{ color: 'var(--text-primary)' }}>
+                {totalTeams === 0 ? 0 : startIndex + 1}
+              </strong>{' '}
+              to{' '}
+              <strong style={{ color: 'var(--text-primary)' }}>
+                {endIndex}
+              </strong>{' '}
+              of{' '}
+              <strong style={{ color: 'var(--text-primary)' }}>
+                {totalTeams}
+              </strong>{' '}
+              teams
+            </span>
+
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                fontSize: '0.85rem',
+                color: 'var(--text-secondary)',
+              }}
+            >
+              <span>Rows per page:</span>
+              <select
+                className="form-select"
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                style={{
+                  width: '85px',
+                  padding: '0.25rem 0.6rem',
+                  fontSize: '0.85rem',
+                  height: '32px',
+                }}
+              >
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={200}>200</option>
+                <option value={500}>500</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Right: Page Navigation */}
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              flexWrap: 'wrap',
+            }}
+          >
+            <button
+              className="btn btn-sm btn-secondary"
+              onClick={() => setCurrentPage(1)}
+              disabled={safeCurrentPage <= 1}
+              title="First Page"
+              style={{
+                padding: '0.35rem 0.55rem',
+                opacity: safeCurrentPage <= 1 ? 0.45 : 1,
+                cursor: safeCurrentPage <= 1 ? 'not-allowed' : 'pointer',
+              }}
+            >
+              <ChevronFirst size={16} />
+            </button>
+            <button
+              className="btn btn-sm btn-secondary"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={safeCurrentPage <= 1}
+              title="Previous Page"
+              style={{
+                padding: '0.35rem 0.55rem',
+                opacity: safeCurrentPage <= 1 ? 0.45 : 1,
+                cursor: safeCurrentPage <= 1 ? 'not-allowed' : 'pointer',
+              }}
+            >
+              <ChevronLeft size={16} />
+            </button>
+
+            {/* Page number pills */}
+            {getPageNumbers().map((p, idx) =>
+              typeof p === 'number' ? (
+                <button
+                  key={idx}
+                  className={`btn btn-sm ${p === safeCurrentPage ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setCurrentPage(p)}
+                  style={{
+                    minWidth: '34px',
+                    padding: '0.35rem 0.6rem',
+                    fontWeight: p === safeCurrentPage ? 700 : 500,
+                  }}
+                >
+                  {p}
+                </button>
+              ) : (
+                <span
+                  key={idx}
+                  style={{
+                    padding: '0 0.35rem',
+                    color: 'var(--text-muted)',
+                    fontSize: '0.85rem',
+                    userSelect: 'none',
+                  }}
+                >
+                  ...
+                </span>
+              )
+            )}
+
+            <button
+              className="btn btn-sm btn-secondary"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={safeCurrentPage >= totalPages}
+              title="Next Page"
+              style={{
+                padding: '0.35rem 0.55rem',
+                opacity: safeCurrentPage >= totalPages ? 0.45 : 1,
+                cursor: safeCurrentPage >= totalPages ? 'not-allowed' : 'pointer',
+              }}
+            >
+              <ChevronRight size={16} />
+            </button>
+            <button
+              className="btn btn-sm btn-secondary"
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={safeCurrentPage >= totalPages}
+              title="Last Page"
+              style={{
+                padding: '0.35rem 0.55rem',
+                opacity: safeCurrentPage >= totalPages ? 0.45 : 1,
+                cursor: safeCurrentPage >= totalPages ? 'not-allowed' : 'pointer',
+              }}
+            >
+              <ChevronLast size={16} />
+            </button>
+          </div>
         </div>
       </div>
 

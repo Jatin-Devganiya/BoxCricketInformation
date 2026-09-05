@@ -13,7 +13,15 @@ import {
   X,
   Eye,
   Sliders,
-  Info
+  Info,
+  Search,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronFirst,
+  ChevronLast
 } from 'lucide-react';
 
 interface PermissionDef {
@@ -85,6 +93,25 @@ const ROLE_DEFAULTS: Record<string, Record<string, boolean>> = {
 export const Users: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+
+  // Filters
+  const [search, setSearch] = useState<string>('');
+  const [roleFilter, setRoleFilter] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<string>('');
+
+  // Sorting
+  type SortField = 'user' | 'role' | 'status' | 'overrides' | 'created';
+  const [sortField, setSortField] = useState<SortField>('created');
+  const [sortAsc, setSortAsc] = useState<boolean>(false); // Newest users first by default
+
+  // Pagination (Default 100)
+  const [pageSize, setPageSize] = useState<number>(100);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+
+  // Reset page when filters or sort change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, roleFilter, statusFilter, sortField, sortAsc, pageSize]);
 
   // Edit / Create Modal state
   const [editModalOpen, setEditModalOpen] = useState<boolean>(false);
@@ -258,9 +285,102 @@ export const Users: React.FC = () => {
     };
   };
 
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortAsc(!sortAsc);
+    } else {
+      setSortField(field);
+      // For created date and overrides, descending on first click
+      setSortAsc(field === 'created' || field === 'overrides' ? false : true);
+    }
+  };
+
+  const renderSortIndicator = (field: SortField) => {
+    if (sortField !== field) {
+      return <ArrowUpDown size={13} style={{ opacity: 0.3, marginLeft: '0.35rem', verticalAlign: 'middle' }} />;
+    }
+    return sortAsc ? (
+      <ArrowUp size={13} style={{ color: '#10b981', marginLeft: '0.35rem', verticalAlign: 'middle' }} />
+    ) : (
+      <ArrowDown size={13} style={{ color: '#10b981', marginLeft: '0.35rem', verticalAlign: 'middle' }} />
+    );
+  };
+
+  const filteredUsers = users.filter((u) => {
+    if (search.trim()) {
+      const q = search.toLowerCase().trim();
+      const fullName = `${u.firstName || ''} ${u.lastName || ''}`.toLowerCase();
+      const username = (u.username || '').toLowerCase();
+      if (!fullName.includes(q) && !username.includes(q)) return false;
+    }
+    const userRole = u.roles?.[0] || 'User';
+    if (roleFilter && userRole.toLowerCase() !== roleFilter.toLowerCase()) {
+      return false;
+    }
+    if (statusFilter && u.status.toLowerCase() !== statusFilter.toLowerCase()) {
+      return false;
+    }
+    return true;
+  });
+
+  const sortedUsers = [...filteredUsers].sort((a, b) => {
+    if (sortField === 'user') {
+      const aName = `${a.firstName} ${a.lastName}`.trim() || a.username;
+      const bName = `${b.firstName} ${b.lastName}`.trim() || b.username;
+      return sortAsc ? aName.localeCompare(bName) : bName.localeCompare(aName);
+    }
+    if (sortField === 'role') {
+      const aRole = a.roles?.[0] || 'User';
+      const bRole = b.roles?.[0] || 'User';
+      return sortAsc ? aRole.localeCompare(bRole) : bRole.localeCompare(aRole);
+    }
+    if (sortField === 'status') {
+      return sortAsc ? a.status.localeCompare(b.status) : b.status.localeCompare(a.status);
+    }
+    if (sortField === 'overrides') {
+      const aCount = Object.values(a.overrides || {}).filter((v) => v === 'Allow' || v === 'Deny').length;
+      const bCount = Object.values(b.overrides || {}).filter((v) => v === 'Allow' || v === 'Deny').length;
+      if (aCount !== bCount) return sortAsc ? aCount - bCount : bCount - aCount;
+      return a.username.localeCompare(b.username);
+    }
+    if (sortField === 'created') {
+      const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return sortAsc ? aTime - bTime : bTime - aTime;
+    }
+    return sortAsc ? a.username.localeCompare(b.username) : b.username.localeCompare(a.username);
+  });
+
+  // Pagination calculations
+  const totalUsers = sortedUsers.length;
+  const totalPages = Math.max(1, Math.ceil(totalUsers / pageSize));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const startIndex = totalUsers === 0 ? 0 : (safeCurrentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, totalUsers);
+  const paginatedUsers = sortedUsers.slice(startIndex, endIndex);
+
+  const getPageNumbers = () => {
+    const pages: (number | string)[] = [];
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      if (safeCurrentPage > 3) pages.push('...');
+      const start = Math.max(2, safeCurrentPage - 1);
+      const end = Math.min(totalPages - 1, safeCurrentPage + 1);
+      for (let i = start; i <= end; i++) {
+        pages.push(i);
+      }
+      if (safeCurrentPage < totalPages - 2) pages.push('...');
+      pages.push(totalPages);
+    }
+    return pages;
+  };
+
   return (
     <div>
-      <div className="filter-bar">
+      {/* Header & Add User */}
+      <div className="filter-bar" style={{ marginBottom: '1rem' }}>
         <div>
           <h2 style={{ fontSize: '1.1rem', fontWeight: 600 }}>User Management & Access Control</h2>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
@@ -272,16 +392,100 @@ export const Users: React.FC = () => {
         </button>
       </div>
 
+      {/* Search & Filter Bar */}
+      <div className="filter-bar" style={{ marginBottom: '1.25rem' }}>
+        <div className="search-input-wrap">
+          <Search size={18} />
+          <input
+            type="text"
+            className="form-input"
+            placeholder="Search users by name or username..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <select
+            className="form-select"
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value)}
+            style={{ width: '135px' }}
+          >
+            <option value="">All Roles</option>
+            <option value="Admin">Admin</option>
+            <option value="Umpire">Umpire</option>
+            <option value="User">User</option>
+          </select>
+
+          <select
+            className="form-select"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            style={{ width: '140px' }}
+          >
+            <option value="">All Status</option>
+            <option value="Active">Active</option>
+            <option value="Inactive">Inactive</option>
+          </select>
+        </div>
+      </div>
+
       <div className="card">
         <div className="table-container">
           <table className="custom-table">
             <thead>
               <tr>
-                <th>User</th>
-                <th>Role</th>
-                <th>Status</th>
-                <th>Permission Overrides & Effective Access</th>
-                <th>Created</th>
+                <th
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => handleSort('user')}
+                  title="User - Click to sort"
+                >
+                  <div style={{ display: 'inline-flex', alignItems: 'center' }}>
+                    User
+                    {renderSortIndicator('user')}
+                  </div>
+                </th>
+                <th
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => handleSort('role')}
+                  title="Role - Click to sort"
+                >
+                  <div style={{ display: 'inline-flex', alignItems: 'center' }}>
+                    Role
+                    {renderSortIndicator('role')}
+                  </div>
+                </th>
+                <th
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => handleSort('status')}
+                  title="Status - Click to sort"
+                >
+                  <div style={{ display: 'inline-flex', alignItems: 'center' }}>
+                    Status
+                    {renderSortIndicator('status')}
+                  </div>
+                </th>
+                <th
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => handleSort('overrides')}
+                  title="Permission Overrides & Access - Click to sort"
+                >
+                  <div style={{ display: 'inline-flex', alignItems: 'center' }}>
+                    Permission Overrides & Effective Access
+                    {renderSortIndicator('overrides')}
+                  </div>
+                </th>
+                <th
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => handleSort('created')}
+                  title="Created Date - Click to sort"
+                >
+                  <div style={{ display: 'inline-flex', alignItems: 'center' }}>
+                    Created
+                    {renderSortIndicator('created')}
+                  </div>
+                </th>
                 <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
@@ -292,14 +496,14 @@ export const Users: React.FC = () => {
                     Loading users...
                   </td>
                 </tr>
-              ) : users.length === 0 ? (
+              ) : paginatedUsers.length === 0 ? (
                 <tr>
                   <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
-                    No users found.
+                    No users found matching your criteria.
                   </td>
                 </tr>
               ) : (
-                users.map((u) => {
+                paginatedUsers.map((u) => {
                   const userRole = u.roles?.[0] || 'User';
                   const overridesList = Object.entries(u.overrides || {}).filter(
                     ([, val]) => val === 'Allow' || val === 'Deny'
@@ -406,6 +610,165 @@ export const Users: React.FC = () => {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Pagination Controls */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginTop: '1.25rem',
+            paddingTop: '1rem',
+            borderTop: '1px solid rgba(255, 255, 255, 0.07)',
+            flexWrap: 'wrap',
+            gap: '1rem',
+          }}
+        >
+          {/* Left: Summary & Rows Per Page */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+              Showing{' '}
+              <strong style={{ color: 'var(--text-primary)' }}>
+                {totalUsers === 0 ? 0 : startIndex + 1}
+              </strong>{' '}
+              to{' '}
+              <strong style={{ color: 'var(--text-primary)' }}>
+                {endIndex}
+              </strong>{' '}
+              of{' '}
+              <strong style={{ color: 'var(--text-primary)' }}>
+                {totalUsers}
+              </strong>{' '}
+              users
+            </span>
+
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                fontSize: '0.85rem',
+                color: 'var(--text-secondary)',
+              }}
+            >
+              <span>Rows per page:</span>
+              <select
+                className="form-select"
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                style={{
+                  width: '85px',
+                  padding: '0.25rem 0.6rem',
+                  fontSize: '0.85rem',
+                  height: '32px',
+                }}
+              >
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={200}>200</option>
+                <option value={500}>500</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Right: Page Navigation */}
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              flexWrap: 'wrap',
+            }}
+          >
+            <button
+              className="btn btn-sm btn-secondary"
+              onClick={() => setCurrentPage(1)}
+              disabled={safeCurrentPage <= 1}
+              title="First Page"
+              style={{
+                padding: '0.35rem 0.55rem',
+                opacity: safeCurrentPage <= 1 ? 0.45 : 1,
+                cursor: safeCurrentPage <= 1 ? 'not-allowed' : 'pointer',
+              }}
+            >
+              <ChevronFirst size={16} />
+            </button>
+            <button
+              className="btn btn-sm btn-secondary"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={safeCurrentPage <= 1}
+              title="Previous Page"
+              style={{
+                padding: '0.35rem 0.55rem',
+                opacity: safeCurrentPage <= 1 ? 0.45 : 1,
+                cursor: safeCurrentPage <= 1 ? 'not-allowed' : 'pointer',
+              }}
+            >
+              <ChevronLeft size={16} />
+            </button>
+
+            {/* Page number pills */}
+            {getPageNumbers().map((p, idx) =>
+              typeof p === 'number' ? (
+                <button
+                  key={idx}
+                  className={`btn btn-sm ${p === safeCurrentPage ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setCurrentPage(p)}
+                  style={{
+                    minWidth: '34px',
+                    padding: '0.35rem 0.6rem',
+                    fontWeight: p === safeCurrentPage ? 700 : 500,
+                  }}
+                >
+                  {p}
+                </button>
+              ) : (
+                <span
+                  key={idx}
+                  style={{
+                    padding: '0 0.35rem',
+                    color: 'var(--text-muted)',
+                    fontSize: '0.85rem',
+                    userSelect: 'none',
+                  }}
+                >
+                  ...
+                </span>
+              )
+            )}
+
+            <button
+              className="btn btn-sm btn-secondary"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={safeCurrentPage >= totalPages}
+              title="Next Page"
+              style={{
+                padding: '0.35rem 0.55rem',
+                opacity: safeCurrentPage >= totalPages ? 0.45 : 1,
+                cursor: safeCurrentPage >= totalPages ? 'not-allowed' : 'pointer',
+              }}
+            >
+              <ChevronRight size={16} />
+            </button>
+            <button
+              className="btn btn-sm btn-secondary"
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={safeCurrentPage >= totalPages}
+              title="Last Page"
+              style={{
+                padding: '0.35rem 0.55rem',
+                opacity: safeCurrentPage >= totalPages ? 0.45 : 1,
+                cursor: safeCurrentPage >= totalPages ? 'not-allowed' : 'pointer',
+              }}
+            >
+              <ChevronLast size={16} />
+            </button>
+          </div>
         </div>
       </div>
 
