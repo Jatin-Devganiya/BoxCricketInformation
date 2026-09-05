@@ -520,7 +520,7 @@ export const Players: React.FC = () => {
                                 p.battingRank === 1
                                   ? '#fbbf24'
                                   : p.battingRank === 2
-                                  ? '#e2e8f0'
+                                  ? 'var(--rank-silver, #94a3b8)'
                                   : p.battingRank === 3
                                   ? '#f97316'
                                   : 'var(--text-primary)',
@@ -557,7 +557,7 @@ export const Players: React.FC = () => {
                                 p.bowlingRank === 1
                                   ? '#fbbf24'
                                   : p.bowlingRank === 2
-                                  ? '#e2e8f0'
+                                  ? 'var(--rank-silver, #94a3b8)'
                                   : p.bowlingRank === 3
                                   ? '#f97316'
                                   : 'var(--text-primary)',

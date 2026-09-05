@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import {
   LayoutDashboard,
   Users,
@@ -10,7 +11,9 @@ import {
   LogOut,
   Menu,
   X,
-  Activity
+  Activity,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -31,6 +34,7 @@ export const Layout: React.FC<LayoutProps> = ({
   actions,
 }) => {
   const { user, canManageUsers, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const navItems = [
@@ -132,7 +136,29 @@ export const Layout: React.FC<LayoutProps> = ({
               {pageSubtitle && <p>{pageSubtitle}</p>}
             </div>
           </div>
-          {actions && <div className="header-actions">{actions}</div>}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            {actions && <div className="header-actions">{actions}</div>}
+            <button
+              type="button"
+              id="theme-toggle-button"
+              className="btn btn-secondary theme-toggle-btn"
+              onClick={toggleTheme}
+              title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              aria-label={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            >
+              {theme === 'dark' ? (
+                <>
+                  <Sun size={17} />
+                  <span className="theme-toggle-text">Light</span>
+                </>
+              ) : (
+                <>
+                  <Moon size={17} />
+                  <span className="theme-toggle-text">Dark</span>
+                </>
+              )}
+            </button>
+          </div>
         </header>
 
         <main className="content-body">{children}</main>

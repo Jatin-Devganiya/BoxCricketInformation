@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Activity, Lock, User as UserIcon, AlertCircle } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
+import { Activity, Lock, User as UserIcon, AlertCircle, Sun, Moon } from 'lucide-react';
 
 export const Login: React.FC = () => {
   const { login } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -40,8 +42,30 @@ export const Login: React.FC = () => {
         alignItems: 'center',
         justifyContent: 'center',
         padding: '1.5rem',
+        position: 'relative',
       }}
     >
+      <div style={{ position: 'absolute', top: '1.25rem', right: '1.25rem' }}>
+        <button
+          type="button"
+          className="btn btn-secondary theme-toggle-btn"
+          onClick={toggleTheme}
+          title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          aria-label={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+        >
+          {theme === 'dark' ? (
+            <>
+              <Sun size={17} />
+              <span className="theme-toggle-text">Light</span>
+            </>
+          ) : (
+            <>
+              <Moon size={17} />
+              <span className="theme-toggle-text">Dark</span>
+            </>
+          )}
+        </button>
+      </div>
       <div
         className="card"
         style={{

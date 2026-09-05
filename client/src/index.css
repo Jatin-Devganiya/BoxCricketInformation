@@ -25,6 +25,32 @@
   --shadow-card: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
   --shadow-hover: 0 12px 40px 0 rgba(16, 185, 129, 0.2);
   --glass-backdrop: blur(12px);
+  --rank-silver: #cbd5e1;
+}
+
+[data-theme="light"] {
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f1f5f9;
+  --border-color: #e2e8f0;
+  --border-active: rgba(16, 185, 129, 0.6);
+
+  --accent-cricket: #059669;
+  --accent-cricket-dark: #047857;
+  --accent-gold: #d97706;
+  --accent-blue: #2563eb;
+  --accent-purple: #7c3aed;
+  --accent-red: #dc2626;
+
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+
+  --shadow-card: 0 4px 20px -2px rgba(0, 0, 0, 0.06), 0 2px 6px -1px rgba(0, 0, 0, 0.04);
+  --shadow-hover: 0 10px 25px -3px rgba(16, 185, 129, 0.18), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --glass-backdrop: blur(8px);
+  --rank-silver: #64748b;
 }
 
 * {
@@ -40,6 +66,12 @@ body {
   min-height: 100vh;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+}
+
+[data-theme="light"] body,
+body[data-theme="light"] {
+  background: #f8fafc;
+  color: var(--text-primary);
 }
 
 /* App Layout */
@@ -1293,4 +1325,379 @@ body {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 1rem;
+}
+
+/* =========================================================
+   THEME TOGGLE BUTTON
+   ========================================================= */
+.theme-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.42rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.theme-toggle-btn:hover {
+  transform: translateY(-1px);
+}
+
+[data-theme="dark"] .theme-toggle-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #f8fafc;
+}
+
+[data-theme="dark"] .theme-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: #fbbf24;
+  color: #fbbf24;
+}
+
+[data-theme="light"] .theme-toggle-btn {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #0f172a;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .theme-toggle-btn:hover {
+  background: #f1f5f9;
+  border-color: #6366f1;
+  color: #4f46e5;
+}
+
+@media (max-width: 640px) {
+  .theme-toggle-text {
+    display: none;
+  }
+  .theme-toggle-btn {
+    padding: 0.45rem 0.55rem;
+  }
+}
+
+/* =========================================================
+   COMPREHENSIVE LIGHT THEME OVERRIDES ([data-theme="light"])
+   ========================================================= */
+[data-theme="light"] {
+  color-scheme: light;
+}
+
+/* Sidebar & Brand */
+[data-theme="light"] .sidebar {
+  background: #ffffff;
+  border-right: 1px solid var(--border-color);
+  box-shadow: 2px 0 14px rgba(0, 0, 0, 0.03);
+}
+
+[data-theme="light"] .sidebar-header {
+  border-bottom: 1px solid var(--border-color);
+}
+
+[data-theme="light"] .brand-title {
+  background: linear-gradient(to right, #0f172a, #334155);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+[data-theme="light"] .sidebar-footer {
+  background: #f8fafc;
+  border-top: 1px solid var(--border-color);
+}
+
+[data-theme="light"] .nav-link {
+  color: var(--text-secondary);
+}
+
+[data-theme="light"] .nav-link:hover {
+  color: var(--text-primary);
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] .nav-link.active {
+  color: #047857;
+  background: linear-gradient(90deg, rgba(16, 185, 129, 0.16), rgba(16, 185, 129, 0.04));
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+/* Top Header */
+[data-theme="light"] .top-header {
+  background: rgba(255, 255, 255, 0.92);
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: 0 1px 4px 0 rgba(0, 0, 0, 0.04);
+}
+
+/* Cards */
+[data-theme="light"] .card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: var(--shadow-card);
+}
+
+[data-theme="light"] .card-hover:hover {
+  border-color: rgba(16, 185, 129, 0.5);
+  box-shadow: 0 12px 30px -4px rgba(0, 0, 0, 0.08);
+}
+
+/* Tables */
+[data-theme="light"] .table-container {
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.03);
+}
+
+[data-theme="light"] .custom-table th {
+  background: #f8fafc;
+  color: #475569;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+[data-theme="light"] .custom-table td {
+  border-bottom: 1px solid #f1f5f9;
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .custom-table tr:hover td {
+  background: #f8fafc;
+}
+
+/* Form Inputs, Selects & Placeholders */
+[data-theme="light"] .form-input,
+[data-theme="light"] .form-select {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #0f172a;
+}
+
+[data-theme="light"] .form-input:focus,
+[data-theme="light"] .form-select:focus {
+  background: #ffffff;
+  border-color: var(--accent-cricket);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+[data-theme="light"] .form-input::placeholder {
+  color: #94a3b8;
+}
+
+/* Buttons */
+[data-theme="light"] .btn-secondary {
+  background: #f1f5f9;
+  color: #1e293b;
+  border: 1px solid #cbd5e1;
+}
+
+[data-theme="light"] .btn-secondary:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+  border-color: #94a3b8;
+}
+
+/* Modals */
+[data-theme="light"] .modal-overlay {
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+}
+
+[data-theme="light"] .modal-content {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="light"] .modal-header {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+[data-theme="light"] .modal-footer {
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+}
+
+/* Tabs */
+[data-theme="light"] .tabs-nav {
+  border-bottom-color: #e2e8f0;
+}
+
+[data-theme="light"] .tab-btn {
+  color: #64748b;
+}
+
+[data-theme="light"] .tab-btn:hover {
+  color: #0f172a;
+}
+
+[data-theme="light"] .tab-btn.active {
+  color: #059669;
+  border-bottom-color: #059669;
+}
+
+/* Badges & Alerts */
+[data-theme="light"] .badge-muted {
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #cbd5e1;
+}
+
+[data-theme="light"] .alert-danger {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+[data-theme="light"] .alert-success {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #065f46;
+}
+
+/* Match & Teams Cards */
+[data-theme="light"] .match-teams {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+[data-theme="light"] .team-badge {
+  background: #f1f5f9;
+  color: #1e293b;
+  border: 2px solid #cbd5e1;
+}
+
+[data-theme="light"] .series-selection-bar {
+  background: #ffffff;
+  border-color: #e2e8f0;
+  box-shadow: var(--shadow-card);
+}
+
+[data-theme="light"] .series-chip-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: var(--text-secondary);
+}
+
+[data-theme="light"] .series-chip-card:hover {
+  background: #f1f5f9;
+  border-color: rgba(16, 185, 129, 0.5);
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .series-chip-card.active {
+  background: #ecfdf5;
+  border-color: var(--accent-cricket);
+  color: #065f46;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.15);
+}
+
+[data-theme="light"] .series-chip-card.active .series-chip-meta {
+  color: #047857;
+}
+
+[data-theme="light"] .series-banner {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #065f46;
+}
+
+/* Ball-by-ball Live Scoreboard & Controls */
+[data-theme="light"] .score-table input {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+[data-theme="light"] .live-scoreboard-header {
+  background: linear-gradient(135deg, #ffffff, #f8fafc);
+  border-color: #e2e8f0;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="light"] .live-score-runs-wickets {
+  color: #0f172a;
+}
+
+[data-theme="light"] .crease-card {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] .crease-card.active-striker {
+  border-color: rgba(16, 185, 129, 0.6);
+  background: #ecfdf5;
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.12);
+}
+
+[data-theme="light"] .crease-player-name {
+  color: #0f172a;
+}
+
+[data-theme="light"] .crease-runs-large {
+  color: #0f172a;
+}
+
+[data-theme="light"] .strike-swap-btn {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #475569;
+}
+
+[data-theme="light"] .strike-swap-btn:hover {
+  background: #ecfdf5;
+  color: #059669;
+  border-color: #059669;
+}
+
+[data-theme="light"] .over-timeline-box {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] .ball-pill-dot {
+  background: #e2e8f0;
+  color: #64748b;
+  border: 1px solid #cbd5e1;
+}
+
+[data-theme="light"] .scoring-pad-wrapper {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+[data-theme="light"] .run-pad-btn {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #0f172a;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="light"] .run-pad-btn:hover:not(:disabled) {
+  background: #ecfdf5;
+  border-color: var(--accent-cricket);
+  color: #047857;
+}
+
+[data-theme="light"] .action-pad-btn.btn-deadball {
+  background: #f1f5f9;
+  color: #475569;
+  border-color: #cbd5e1;
+}
+
+[data-theme="light"] .action-pad-btn.btn-deadball:hover:not(:disabled) {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+[data-theme="light"] .sidebar-toggle-btn {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+[data-theme="light"] .sidebar-backdrop {
+  background: rgba(15, 23, 42, 0.4);
 }
