@@ -26,6 +26,10 @@ export interface Player {
   userId?: number;
   currentTeamName?: string;
   manOfTheMatchCount?: number;
+  totalRuns?: number;
+  totalWickets?: number;
+  battingRank?: number | null;
+  bowlingRank?: number | null;
   createdAt: string;
 }
 

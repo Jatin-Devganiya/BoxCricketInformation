@@ -11,6 +11,10 @@ public class PlayerDto
     public int? UserId { get; set; }
     public string? CurrentTeamName { get; set; }
     public int ManOfTheMatchCount { get; set; }
+    public int TotalRuns { get; set; }
+    public int TotalWickets { get; set; }
+    public int? BattingRank { get; set; }
+    public int? BowlingRank { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 

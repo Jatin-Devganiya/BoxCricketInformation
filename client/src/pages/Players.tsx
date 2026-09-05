@@ -12,8 +12,55 @@ import {
   Activity,
   AlertCircle,
   Trophy,
-  Award
+  Award,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronFirst,
+  ChevronLast
 } from 'lucide-react';
+
+// Custom SVG Cricket Bat Icon for Batting Rank column
+const BattingIcon: React.FC<{ size?: number; style?: React.CSSProperties }> = ({ size = 18, style }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    style={{ display: 'inline-block', verticalAlign: 'middle', ...style }}
+  >
+    {/* Cricket Bat Grip & Blade */}
+    <path d="M19.5 3.5l1 1-5.5 5.5-1-1 5.5-5.5z" />
+    <path d="M14 9l-9 9a1.5 1.5 0 0 0 0 2.12l.38.38a1.5 1.5 0 0 0 2.12 0l9-9-2.5-2.5z" />
+    <line x1="18.5" y1="4.5" x2="17.5" y2="5.5" />
+  </svg>
+);
+
+// Custom SVG Cricket Ball Icon for Bowling Rank column
+const BowlingIcon: React.FC<{ size?: number; style?: React.CSSProperties }> = ({ size = 18, style }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    style={{ display: 'inline-block', verticalAlign: 'middle', ...style }}
+  >
+    {/* Cricket Ball with Seam */}
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 3a9 9 0 0 1 0 18" strokeDasharray="2 2" />
+    <path d="M7 6a9 9 0 0 1 10 12" strokeDasharray="2 2" />
+  </svg>
+);
 
 export const Players: React.FC = () => {
   const { canManagePlayers } = useAuth();
@@ -23,6 +70,20 @@ export const Players: React.FC = () => {
   const [search, setSearch] = useState<string>('');
   const [category, setCategory] = useState<string>('');
   const [status, setStatus] = useState<string>('');
+
+  // Sorting
+  type SortField = 'batting' | 'bowling' | 'name' | 'category' | 'team' | 'status' | 'mom';
+  const [sortField, setSortField] = useState<SortField>('name');
+  const [sortAsc, setSortAsc] = useState<boolean>(true);
+
+  // Pagination (Default 100)
+  const [pageSize, setPageSize] = useState<number>(100);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+
+  // Reset page when filters or sort change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, category, status, sortField, sortAsc]);
 
   // Modals state
   const [statsModalOpen, setStatsModalOpen] = useState<boolean>(false);
@@ -157,6 +218,102 @@ export const Players: React.FC = () => {
     }
   };
 
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortAsc(!sortAsc);
+    } else {
+      setSortField(field);
+      // For MOM awards, highest count first is expected on first click
+      // For batting/bowling rank, ascending (#1 first) is default
+      // For text columns, ascending (A-Z) is default
+      setSortAsc(field === 'mom' ? false : true);
+    }
+  };
+
+  const renderSortIndicator = (field: SortField) => {
+    if (sortField !== field) {
+      return <ArrowUpDown size={13} style={{ opacity: 0.3, marginLeft: '0.35rem', verticalAlign: 'middle' }} />;
+    }
+    return sortAsc ? (
+      <ArrowUp size={13} style={{ color: '#10b981', marginLeft: '0.35rem', verticalAlign: 'middle' }} />
+    ) : (
+      <ArrowDown size={13} style={{ color: '#10b981', marginLeft: '0.35rem', verticalAlign: 'middle' }} />
+    );
+  };
+
+  const sortedPlayers = [...players].sort((a, b) => {
+    if (sortField === 'batting') {
+      const aRank = a.battingRank ?? 999999;
+      const bRank = b.battingRank ?? 999999;
+      if (aRank !== bRank) {
+        return sortAsc ? aRank - bRank : bRank - aRank;
+      }
+      return sortAsc ? (b.totalRuns || 0) - (a.totalRuns || 0) : (a.totalRuns || 0) - (b.totalRuns || 0);
+    }
+    if (sortField === 'bowling') {
+      const aRank = a.bowlingRank ?? 999999;
+      const bRank = b.bowlingRank ?? 999999;
+      if (aRank !== bRank) {
+        return sortAsc ? aRank - bRank : bRank - aRank;
+      }
+      return sortAsc ? (b.totalWickets || 0) - (a.totalWickets || 0) : (a.totalWickets || 0) - (b.totalWickets || 0);
+    }
+    if (sortField === 'category') {
+      const cmp = (a.playerCategory || '').localeCompare(b.playerCategory || '');
+      return sortAsc ? cmp : -cmp;
+    }
+    if (sortField === 'team') {
+      const aTeam = a.currentTeamName || '';
+      const bTeam = b.currentTeamName || '';
+      if (!aTeam && bTeam) return 1;
+      if (aTeam && !bTeam) return -1;
+      const cmp = aTeam.localeCompare(bTeam);
+      return sortAsc ? cmp : -cmp;
+    }
+    if (sortField === 'status') {
+      const cmp = (a.status || '').localeCompare(b.status || '');
+      return sortAsc ? cmp : -cmp;
+    }
+    if (sortField === 'mom') {
+      const aMom = a.manOfTheMatchCount ?? 0;
+      const bMom = b.manOfTheMatchCount ?? 0;
+      if (aMom !== bMom) {
+        return sortAsc ? aMom - bMom : bMom - aMom;
+      }
+      return a.fullName.localeCompare(b.fullName);
+    }
+    return sortAsc
+      ? a.fullName.localeCompare(b.fullName)
+      : b.fullName.localeCompare(a.fullName);
+  });
+
+  // Pagination calculations
+  const totalPlayers = sortedPlayers.length;
+  const totalPages = Math.max(1, Math.ceil(totalPlayers / pageSize));
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const startIndex = totalPlayers === 0 ? 0 : (safeCurrentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, totalPlayers);
+  const paginatedPlayers = sortedPlayers.slice(startIndex, endIndex);
+
+  // Generate page numbers array with intelligent ellipsis
+  const getPageNumbers = () => {
+    const pages: (number | string)[] = [];
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      if (safeCurrentPage > 3) pages.push('...');
+      const start = Math.max(2, safeCurrentPage - 1);
+      const end = Math.min(totalPages - 1, safeCurrentPage + 1);
+      for (let i = start; i <= end; i++) {
+        pages.push(i);
+      }
+      if (safeCurrentPage < totalPages - 2) pages.push('...');
+      pages.push(totalPages);
+    }
+    return pages;
+  };
+
   return (
     <div>
       {/* Search & Filter Bar */}
@@ -211,30 +368,193 @@ export const Players: React.FC = () => {
           <table className="custom-table">
             <thead>
               <tr>
-                <th>Player Name</th>
-                <th>Category</th>
-                <th>Current Team</th>
-                <th>Status</th>
-                <th>MOM Awards</th>
+                <th
+                  style={{ width: '64px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => handleSort('batting')}
+                  title="Batting Rank (Total Runs) - Click to sort"
+                >
+                  <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
+                    <span
+                      style={{
+                        color: sortField === 'batting' ? '#10b981' : 'var(--text-secondary)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <BattingIcon size={19} />
+                    </span>
+                    {sortField === 'batting' ? (
+                      sortAsc ? <ArrowUp size={12} color="#10b981" /> : <ArrowDown size={12} color="#10b981" />
+                    ) : (
+                      <ArrowUpDown size={11} style={{ opacity: 0.3 }} />
+                    )}
+                  </div>
+                </th>
+                <th
+                  style={{ width: '64px', textAlign: 'center', cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => handleSort('bowling')}
+                  title="Bowling Rank (Total Wickets) - Click to sort"
+                >
+                  <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '3px' }}>
+                    <span
+                      style={{
+                        color: sortField === 'bowling' ? '#3b82f6' : 'var(--text-secondary)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <BowlingIcon size={19} />
+                    </span>
+                    {sortField === 'bowling' ? (
+                      sortAsc ? <ArrowUp size={12} color="#3b82f6" /> : <ArrowDown size={12} color="#3b82f6" />
+                    ) : (
+                      <ArrowUpDown size={11} style={{ opacity: 0.3 }} />
+                    )}
+                  </div>
+                </th>
+                <th
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => handleSort('name')}
+                  title="Player Name - Click to sort"
+                >
+                  <div style={{ display: 'inline-flex', alignItems: 'center' }}>
+                    Player Name
+                    {renderSortIndicator('name')}
+                  </div>
+                </th>
+                <th
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => handleSort('category')}
+                  title="Category - Click to sort"
+                >
+                  <div style={{ display: 'inline-flex', alignItems: 'center' }}>
+                    Category
+                    {renderSortIndicator('category')}
+                  </div>
+                </th>
+                <th
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => handleSort('team')}
+                  title="Current Team - Click to sort"
+                >
+                  <div style={{ display: 'inline-flex', alignItems: 'center' }}>
+                    Current Team
+                    {renderSortIndicator('team')}
+                  </div>
+                </th>
+                <th
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => handleSort('status')}
+                  title="Status - Click to sort"
+                >
+                  <div style={{ display: 'inline-flex', alignItems: 'center' }}>
+                    Status
+                    {renderSortIndicator('status')}
+                  </div>
+                </th>
+                <th
+                  style={{ cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => handleSort('mom')}
+                  title="Man of the Match Awards - Click to sort"
+                >
+                  <div style={{ display: 'inline-flex', alignItems: 'center' }}>
+                    MOM Awards
+                    {renderSortIndicator('mom')}
+                  </div>
+                </th>
                 <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                     Loading players...
                   </td>
                 </tr>
-              ) : players.length === 0 ? (
+              ) : paginatedPlayers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                     No players found matching your criteria.
                   </td>
                 </tr>
               ) : (
-                players.map((p) => (
+                paginatedPlayers.map((p) => (
                   <tr key={p.id}>
+                    {/* Batting Rank Column */}
+                    <td style={{ textAlign: 'center', padding: '0.65rem 0.35rem' }}>
+                      {p.battingRank ? (
+                        <div
+                          style={{
+                            display: 'inline-flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            lineHeight: 1.15,
+                          }}
+                          title={`Batting Rank #${p.battingRank} • ${p.totalRuns || 0} Total Runs`}
+                        >
+                          <span
+                            style={{
+                              fontWeight: 800,
+                              fontSize: '0.88rem',
+                              color:
+                                p.battingRank === 1
+                                  ? '#fbbf24'
+                                  : p.battingRank === 2
+                                  ? '#e2e8f0'
+                                  : p.battingRank === 3
+                                  ? '#f97316'
+                                  : 'var(--text-primary)',
+                            }}
+                          >
+                            #{p.battingRank}
+                          </span>
+                          <span style={{ fontSize: '0.7rem', color: '#10b981', fontWeight: 600 }}>
+                            {p.totalRuns || 0} r
+                          </span>
+                        </div>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }} title="No runs recorded yet">-</span>
+                      )}
+                    </td>
+
+                    {/* Bowling Rank Column */}
+                    <td style={{ textAlign: 'center', padding: '0.65rem 0.35rem' }}>
+                      {p.bowlingRank ? (
+                        <div
+                          style={{
+                            display: 'inline-flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            lineHeight: 1.15,
+                          }}
+                          title={`Bowling Rank #${p.bowlingRank} • ${p.totalWickets || 0} Total Wickets`}
+                        >
+                          <span
+                            style={{
+                              fontWeight: 800,
+                              fontSize: '0.88rem',
+                              color:
+                                p.bowlingRank === 1
+                                  ? '#fbbf24'
+                                  : p.bowlingRank === 2
+                                  ? '#e2e8f0'
+                                  : p.bowlingRank === 3
+                                  ? '#f97316'
+                                  : 'var(--text-primary)',
+                            }}
+                          >
+                            #{p.bowlingRank}
+                          </span>
+                          <span style={{ fontSize: '0.7rem', color: '#3b82f6', fontWeight: 600 }}>
+                            {p.totalWickets || 0} w
+                          </span>
+                        </div>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }} title="No wickets recorded yet">-</span>
+                      )}
+                    </td>
+
                     <td style={{ fontWeight: 600 }}>{p.fullName}</td>
                     <td>
                       <span
@@ -317,6 +637,165 @@ export const Players: React.FC = () => {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Pagination Controls */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginTop: '1.25rem',
+            paddingTop: '1rem',
+            borderTop: '1px solid rgba(255, 255, 255, 0.07)',
+            flexWrap: 'wrap',
+            gap: '1rem',
+          }}
+        >
+          {/* Left: Summary & Rows Per Page */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+              Showing{' '}
+              <strong style={{ color: 'var(--text-primary)' }}>
+                {totalPlayers === 0 ? 0 : startIndex + 1}
+              </strong>{' '}
+              to{' '}
+              <strong style={{ color: 'var(--text-primary)' }}>
+                {endIndex}
+              </strong>{' '}
+              of{' '}
+              <strong style={{ color: 'var(--text-primary)' }}>
+                {totalPlayers}
+              </strong>{' '}
+              players
+            </span>
+
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                fontSize: '0.85rem',
+                color: 'var(--text-secondary)',
+              }}
+            >
+              <span>Rows per page:</span>
+              <select
+                className="form-select"
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                style={{
+                  width: '85px',
+                  padding: '0.25rem 0.6rem',
+                  fontSize: '0.85rem',
+                  height: '32px',
+                }}
+              >
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={200}>200</option>
+                <option value={500}>500</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Right: Page Navigation */}
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              flexWrap: 'wrap',
+            }}
+          >
+            <button
+              className="btn btn-sm btn-secondary"
+              onClick={() => setCurrentPage(1)}
+              disabled={safeCurrentPage <= 1}
+              title="First Page"
+              style={{
+                padding: '0.35rem 0.55rem',
+                opacity: safeCurrentPage <= 1 ? 0.45 : 1,
+                cursor: safeCurrentPage <= 1 ? 'not-allowed' : 'pointer',
+              }}
+            >
+              <ChevronFirst size={16} />
+            </button>
+            <button
+              className="btn btn-sm btn-secondary"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={safeCurrentPage <= 1}
+              title="Previous Page"
+              style={{
+                padding: '0.35rem 0.55rem',
+                opacity: safeCurrentPage <= 1 ? 0.45 : 1,
+                cursor: safeCurrentPage <= 1 ? 'not-allowed' : 'pointer',
+              }}
+            >
+              <ChevronLeft size={16} />
+            </button>
+
+            {/* Page number pills */}
+            {getPageNumbers().map((p, idx) =>
+              typeof p === 'number' ? (
+                <button
+                  key={idx}
+                  className={`btn btn-sm ${p === safeCurrentPage ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setCurrentPage(p)}
+                  style={{
+                    minWidth: '34px',
+                    padding: '0.35rem 0.6rem',
+                    fontWeight: p === safeCurrentPage ? 700 : 500,
+                  }}
+                >
+                  {p}
+                </button>
+              ) : (
+                <span
+                  key={idx}
+                  style={{
+                    padding: '0 0.35rem',
+                    color: 'var(--text-muted)',
+                    fontSize: '0.85rem',
+                    userSelect: 'none',
+                  }}
+                >
+                  ...
+                </span>
+              )
+            )}
+
+            <button
+              className="btn btn-sm btn-secondary"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={safeCurrentPage >= totalPages}
+              title="Next Page"
+              style={{
+                padding: '0.35rem 0.55rem',
+                opacity: safeCurrentPage >= totalPages ? 0.45 : 1,
+                cursor: safeCurrentPage >= totalPages ? 'not-allowed' : 'pointer',
+              }}
+            >
+              <ChevronRight size={16} />
+            </button>
+            <button
+              className="btn btn-sm btn-secondary"
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={safeCurrentPage >= totalPages}
+              title="Last Page"
+              style={{
+                padding: '0.35rem 0.55rem',
+                opacity: safeCurrentPage >= totalPages ? 0.45 : 1,
+                cursor: safeCurrentPage >= totalPages ? 'not-allowed' : 'pointer',
+              }}
+            >
+              <ChevronLast size={16} />
+            </button>
+          </div>
         </div>
       </div>
 

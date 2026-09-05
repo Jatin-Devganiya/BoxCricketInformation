@@ -46,6 +46,46 @@ public class PlayersController : ControllerBase
             query = query.Where(p => p.Status.ToLower() == status.ToLower().Trim());
         }
 
+        // Aggregate all-time runs per player across all matches
+        var runsMap = await _context.MatchBattingPerformances
+            .GroupBy(b => b.PlayerId)
+            .Select(g => new { PlayerId = g.Key, TotalRuns = g.Sum(x => x.Runs) })
+            .ToDictionaryAsync(x => x.PlayerId, x => x.TotalRuns);
+
+        // Aggregate all-time wickets per player across all matches
+        var wicketsMap = await _context.MatchBowlingPerformances
+            .GroupBy(b => b.PlayerId)
+            .Select(g => new { PlayerId = g.Key, TotalWickets = g.Sum(x => x.Wickets) })
+            .ToDictionaryAsync(x => x.PlayerId, x => x.TotalWickets);
+
+        // Compute global batting ranks across all players with runs > 0 (dense ranking)
+        var battingRanks = new Dictionary<int, int>();
+        int currentBatRank = 0;
+        int prevRuns = -1;
+        foreach (var item in runsMap.Where(kv => kv.Value > 0).OrderByDescending(kv => kv.Value))
+        {
+            if (item.Value != prevRuns)
+            {
+                currentBatRank++;
+                prevRuns = item.Value;
+            }
+            battingRanks[item.Key] = currentBatRank;
+        }
+
+        // Compute global bowling ranks across all players with wickets > 0 (dense ranking)
+        var bowlingRanks = new Dictionary<int, int>();
+        int currentBowlRank = 0;
+        int prevWickets = -1;
+        foreach (var item in wicketsMap.Where(kv => kv.Value > 0).OrderByDescending(kv => kv.Value))
+        {
+            if (item.Value != prevWickets)
+            {
+                currentBowlRank++;
+                prevWickets = item.Value;
+            }
+            bowlingRanks[item.Key] = currentBowlRank;
+        }
+
         var players = await query
             .OrderBy(p => p.FirstName)
             .ThenBy(p => p.LastName)
@@ -63,6 +103,14 @@ public class PlayersController : ControllerBase
             })
             .ToListAsync();
 
+        foreach (var p in players)
+        {
+            p.TotalRuns = runsMap.GetValueOrDefault(p.Id, 0);
+            p.TotalWickets = wicketsMap.GetValueOrDefault(p.Id, 0);
+            p.BattingRank = battingRanks.TryGetValue(p.Id, out var batRank) ? batRank : null;
+            p.BowlingRank = bowlingRanks.TryGetValue(p.Id, out var bowlRank) ? bowlRank : null;
+        }
+
         return Ok(players);
     }
 
@@ -78,6 +126,34 @@ public class PlayersController : ControllerBase
 
         var momCount = await _context.Matches.CountAsync(m => m.MOMPlayerId == player.Id);
 
+        var playerRuns = await _context.MatchBattingPerformances
+            .Where(b => b.PlayerId == id)
+            .SumAsync(b => (int?)b.Runs) ?? 0;
+
+        var playerWickets = await _context.MatchBowlingPerformances
+            .Where(b => b.PlayerId == id)
+            .SumAsync(b => (int?)b.Wickets) ?? 0;
+
+        int? batRank = null;
+        if (playerRuns > 0)
+        {
+            var higherRuns = await _context.MatchBattingPerformances
+                .GroupBy(b => b.PlayerId)
+                .Where(g => g.Sum(x => x.Runs) > playerRuns)
+                .CountAsync();
+            batRank = higherRuns + 1;
+        }
+
+        int? bowlRank = null;
+        if (playerWickets > 0)
+        {
+            var higherWickets = await _context.MatchBowlingPerformances
+                .GroupBy(b => b.PlayerId)
+                .Where(g => g.Sum(x => x.Wickets) > playerWickets)
+                .CountAsync();
+            bowlRank = higherWickets + 1;
+        }
+
         return Ok(new PlayerDto
         {
             Id = player.Id,
@@ -88,6 +164,10 @@ public class PlayersController : ControllerBase
             UserId = player.UserId,
             CurrentTeamName = player.TeamPlayers.Select(tp => tp.Team.Name).FirstOrDefault(),
             ManOfTheMatchCount = momCount,
+            TotalRuns = playerRuns,
+            TotalWickets = playerWickets,
+            BattingRank = batRank,
+            BowlingRank = bowlRank,
             CreatedAt = player.CreatedAt
         });
     }
