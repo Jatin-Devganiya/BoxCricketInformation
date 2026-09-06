@@ -1701,3 +1701,532 @@ body[data-theme="light"] {
 [data-theme="light"] .sidebar-backdrop {
   background: rgba(15, 23, 42, 0.4);
 }
+
+/* =========================================================
+   LIVE CRICKET CELEBRATIONS OVERLAY & ANIMATIONS
+   ========================================================= */
+
+.celebration-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 9, 23, 0.82);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  cursor: pointer;
+  user-select: none;
+  animation: celebrationOverlayFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-theme="light"] .celebration-overlay {
+  background: rgba(15, 23, 42, 0.72);
+}
+
+.celebration-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.celebration-card {
+  position: relative;
+  z-index: 2;
+  width: 88%;
+  max-width: 440px;
+  background: linear-gradient(145deg, rgba(23, 37, 68, 0.96), rgba(11, 19, 43, 0.98));
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  border-radius: 24px;
+  padding: 2.25rem 2rem 1.5rem 2rem;
+  text-align: center;
+  box-shadow: 0 25px 60px -10px rgba(0, 0, 0, 0.8), 0 0 40px rgba(0, 0, 0, 0.5);
+  animation: celebrationCardPop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  cursor: default;
+  overflow: hidden;
+}
+
+[data-theme="light"] .celebration-card {
+  background: linear-gradient(145deg, #ffffff, #f8fafc);
+  border-color: #cbd5e1;
+  box-shadow: 0 25px 60px -10px rgba(0, 0, 0, 0.25), 0 0 35px rgba(0, 0, 0, 0.1);
+}
+
+/* Event Specific Border Glows */
+.celebration-type-six .celebration-card {
+  border-color: rgba(16, 185, 129, 0.7);
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7), 0 0 50px rgba(16, 185, 129, 0.4);
+}
+
+.celebration-type-four .celebration-card {
+  border-color: rgba(59, 130, 246, 0.7);
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7), 0 0 45px rgba(59, 130, 246, 0.35);
+}
+
+.celebration-type-wicket .celebration-card {
+  border-color: rgba(239, 68, 68, 0.8);
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.75), 0 0 55px rgba(239, 68, 68, 0.45);
+  animation: celebrationCardPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), celebrationShake 0.45s ease-out;
+}
+
+.celebration-type-fifty .celebration-card,
+.celebration-type-century .celebration-card,
+.celebration-type-milestone .celebration-card {
+  border-color: rgba(245, 158, 11, 0.8);
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.75), 0 0 60px rgba(245, 158, 11, 0.45);
+}
+
+/* Controls */
+.celebration-controls {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  z-index: 10;
+}
+
+.celebration-ctrl-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.celebration-ctrl-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  transform: scale(1.08);
+}
+
+[data-theme="light"] .celebration-ctrl-btn {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  color: #475569;
+}
+
+[data-theme="light"] .celebration-ctrl-btn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+/* Visual Box */
+.celebration-visual-box {
+  position: relative;
+  height: 95px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.75rem;
+}
+
+/* Cricket Ball */
+.cricket-ball {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #f87171, #dc2626 65%, #7f1d1d);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5), inset 0 2px 4px rgba(255, 255, 255, 0.4);
+  position: relative;
+}
+
+.ball-seam {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 2px;
+  height: 100%;
+  border-right: 2px dashed rgba(255, 255, 255, 0.85);
+  transform: translateX(-50%) rotate(25deg);
+}
+
+/* Six Ball Animation */
+.ball-flight-track {
+  position: relative;
+  width: 140px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.animated-six-ball {
+  animation: sixFlyUp 1.8s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+}
+
+@keyframes sixFlyUp {
+  0% {
+    transform: translate(-50px, 35px) scale(0.65) rotate(0deg);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  60% {
+    transform: translate(15px, -30px) scale(1.2) rotate(220deg);
+  }
+  100% {
+    transform: translate(65px, -60px) scale(0.85) rotate(480deg);
+    opacity: 0.1;
+  }
+}
+
+/* Four Ball Animation */
+.ball-boundary-track {
+  position: relative;
+  width: 180px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.animated-four-ball {
+  animation: fourRollFast 1.5s cubic-bezier(0.1, 0.7, 0.3, 1) infinite;
+}
+
+.boundary-rope {
+  position: absolute;
+  bottom: 6px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #10b981 30%, #3b82f6 70%, transparent);
+}
+
+@keyframes fourRollFast {
+  0% {
+    transform: translateX(-75px) rotate(0deg);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  75% {
+    transform: translateX(45px) rotate(600deg);
+  }
+  100% {
+    transform: translateX(85px) rotate(800deg);
+    opacity: 0;
+  }
+}
+
+/* Stumps Animation */
+.stumps-container {
+  position: relative;
+  width: 90px;
+  height: 80px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 8px;
+}
+
+.stump {
+  width: 8px;
+  height: 62px;
+  border-radius: 4px;
+  background: linear-gradient(to bottom, #fde047, #d97706 40%, #78350f);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+  transform-origin: bottom center;
+}
+
+.stump-1 {
+  animation: stumpLeftFall 0.8s ease-out forwards;
+}
+
+.stump-2 {
+  animation: stumpMidFly 0.8s ease-out forwards;
+}
+
+.stump-3 {
+  animation: stumpRightFall 0.8s ease-out forwards;
+}
+
+.bail {
+  position: absolute;
+  top: 14px;
+  width: 22px;
+  height: 4px;
+  border-radius: 2px;
+  background: #fbbf24;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.bail-left {
+  left: 18px;
+  animation: bailFlyLeft 0.8s ease-out forwards;
+}
+
+.bail-right {
+  right: 18px;
+  animation: bailFlyRight 0.8s ease-out forwards;
+}
+
+.stump-impact-flash {
+  position: absolute;
+  top: 25px;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.8);
+  box-shadow: 0 0 35px 20px rgba(239, 68, 68, 0.7);
+  animation: flashBurst 0.5s ease-out forwards;
+}
+
+@keyframes stumpMidFly {
+  0% { transform: translateY(0) rotate(0deg); }
+  35% { transform: translateY(-16px) rotate(14deg); }
+  100% { transform: translateY(-4px) rotate(26deg); }
+}
+
+@keyframes stumpLeftFall {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(-28deg); }
+}
+
+@keyframes stumpRightFall {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(32deg); }
+}
+
+@keyframes bailFlyLeft {
+  0% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+  100% { transform: translate(-36px, -45px) rotate(-140deg); opacity: 0.3; }
+}
+
+@keyframes bailFlyRight {
+  0% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+  100% { transform: translate(40px, -40px) rotate(160deg); opacity: 0.3; }
+}
+
+@keyframes flashBurst {
+  0% { transform: translate(-50%, -50%) scale(0.5); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(2.8); opacity: 0; }
+}
+
+/* Milestone Icons */
+.milestone-trophy-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.milestone-halo {
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.4), transparent 70%);
+  animation: haloPulse 1.8s ease-in-out infinite alternate;
+}
+
+.milestone-icon {
+  animation: trophyHover 2s ease-in-out infinite alternate;
+}
+
+.icon-fifty {
+  color: #fbbf24;
+  filter: drop-shadow(0 0 16px rgba(251, 191, 36, 0.8));
+}
+
+.icon-century {
+  color: #f59e0b;
+  filter: drop-shadow(0 0 20px rgba(245, 158, 11, 0.9));
+}
+
+.icon-milestone {
+  color: #ec4899;
+  filter: drop-shadow(0 0 20px rgba(236, 72, 153, 0.9));
+}
+
+@keyframes trophyHover {
+  0% { transform: translateY(0) scale(1); }
+  100% { transform: translateY(-8px) scale(1.08); }
+}
+
+@keyframes haloPulse {
+  0% { transform: scale(0.85); opacity: 0.5; }
+  100% { transform: scale(1.35); opacity: 0.9; }
+}
+
+/* Typography & Titles */
+.celebration-pill {
+  display: inline-block;
+  padding: 0.28rem 0.9rem;
+  border-radius: 9999px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.pill-six {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.5);
+}
+
+.pill-four {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.5);
+}
+
+.pill-wicket {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.5);
+}
+
+.pill-milestone {
+  background: rgba(245, 158, 11, 0.22);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.5);
+}
+
+.celebration-title {
+  font-size: 2.85rem;
+  font-weight: 900;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  margin: 0.35rem 0 0.2rem 0;
+  text-transform: uppercase;
+}
+
+.title-six {
+  background: linear-gradient(135deg, #a7f3d0, #10b981 60%, #047857);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 16px rgba(16, 185, 129, 0.65));
+}
+
+.title-four {
+  background: linear-gradient(135deg, #bfdbfe, #3b82f6 60%, #1d4ed8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 16px rgba(59, 130, 246, 0.65));
+}
+
+.title-wicket {
+  background: linear-gradient(135deg, #fecaca, #ef4444 60%, #b91c1c);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 20px rgba(239, 68, 68, 0.75));
+}
+
+.title-milestone {
+  background: linear-gradient(135deg, #fef08a, #f59e0b 60%, #b45309);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 20px rgba(245, 158, 11, 0.75));
+}
+
+.celebration-player-name {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #ffffff;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 0.25rem;
+}
+
+[data-theme="light"] .celebration-player-name {
+  color: #0f172a;
+}
+
+.celebration-subtitle {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-top: 0.15rem;
+}
+
+.celebration-footer {
+  margin-top: 1.25rem;
+}
+
+.celebration-dismiss-btn {
+  font-size: 0.76rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 9999px;
+  opacity: 0.75;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.celebration-dismiss-btn:hover {
+  opacity: 1;
+  color: var(--text-primary);
+}
+
+/* Animations */
+@keyframes celebrationOverlayFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes celebrationCardPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.8) translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes celebrationShake {
+  0%, 100% { transform: translate(0, 0); }
+  15% { transform: translate(-6px, 3px); }
+  30% { transform: translate(5px, -4px); }
+  50% { transform: translate(-4px, 2px); }
+  75% { transform: translate(3px, -2px); }
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .celebration-card {
+    padding: 1.75rem 1.25rem 1.25rem 1.25rem;
+  }
+  .celebration-title {
+    font-size: 2.3rem;
+  }
+  .celebration-player-name {
+    font-size: 1.15rem;
+  }
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  .animated-six-ball,
+  .animated-four-ball,
+  .stump-1, .stump-2, .stump-3,
+  .bail-left, .bail-right,
+  .milestone-icon,
+  .celebration-card {
+    animation: none !important;
+  }
+  .celebration-overlay {
+    transition: opacity 0.2s ease !important;
+  }
+}

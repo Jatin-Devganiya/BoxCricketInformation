@@ -3,6 +3,8 @@ import { matchesApi, seriesApi, teamsApi, liveScoringApi } from '../api/client';
 import { Match, Series, Team, Player, LiveScore, LiveInnings, EligibleBowlersResponse } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { Modal } from '../components/Modal';
+import { LiveScoringCelebration } from '../components/LiveScoringCelebration';
+import { CelebrationEvent, buildCelebrationEvents } from '../utils/cricketCelebrations';
 import {
   canAddMatchesToSeries,
   getAllowedMatchCreationStatuses,
@@ -90,6 +92,44 @@ export const Matches: React.FC<MatchesProps> = ({
   const [scorecardLoading, setScorecardLoading] = useState<boolean>(false);
   const [actionLoading, setActionLoading] = useState<boolean>(false);
   const [scorecardError, setScorecardError] = useState<string | null>(null);
+
+  // Live Scoring Celebration Animations State & Queue
+  const [celebrationQueue, setCelebrationQueue] = useState<CelebrationEvent[]>([]);
+  const [activeCelebration, setActiveCelebration] = useState<CelebrationEvent | null>(null);
+  const [pendingPostCelebrationAction, setPendingPostCelebrationAction] = useState<(() => void) | null>(null);
+
+  const handleCelebrationComplete = () => {
+    setCelebrationQueue((prev) => {
+      if (prev.length > 0) {
+        const [nextEvent, ...rest] = prev;
+        setActiveCelebration(nextEvent);
+        return rest;
+      } else {
+        setActiveCelebration(null);
+        if (pendingPostCelebrationAction) {
+          pendingPostCelebrationAction();
+          setPendingPostCelebrationAction(null);
+        }
+        return [];
+      }
+    });
+  };
+
+  const enqueueCelebrations = (events: CelebrationEvent[], onCompleteCallback?: () => void) => {
+    if (events.length === 0) {
+      if (onCompleteCallback) {
+        onCompleteCallback();
+      }
+      return;
+    }
+
+    if (onCompleteCallback) {
+      setPendingPostCelebrationAction(() => onCompleteCallback);
+    }
+
+    setActiveCelebration(events[0]);
+    setCelebrationQueue(events.slice(1));
+  };
 
   // Tabs inside Scorecard Modal: 'live' (Live Scoring), 'scorecard' (Auto Scorecard Table), 'outcome' (Match Outcome)
   const [modalTab, setModalTab] = useState<'live' | 'scorecard' | 'outcome'>('live');
@@ -531,6 +571,10 @@ export const Matches: React.FC<MatchesProps> = ({
 
   const handleRecordNormalBall = async (runs: number) => {
     if (!activeLiveScore || !currentInnings || actionLoading) return;
+    const previousStriker = currentInnings.striker;
+    const previousStrikerRuns = previousStriker?.runs ?? 0;
+    const strikerName = previousStriker?.playerName || 'Striker';
+
     try {
       setActionLoading(true);
       setScorecardError(null);
@@ -549,9 +593,30 @@ export const Matches: React.FC<MatchesProps> = ({
       fetchMatches();
 
       const activeInn = updated.activeInningsNumber === 1 ? updated.innings1 : updated.innings2;
-      if (activeInn?.requiresNewBatsman) {
-        setNewBatsmanModalOpen(true);
-      }
+      const updatedStriker = activeInn?.battingPerformances?.find((b) => b.playerId === previousStriker?.playerId);
+      const currentStrikerRuns = updatedStriker
+        ? updatedStriker.runs
+        : activeInn?.striker?.playerId === previousStriker?.playerId && activeInn?.striker?.runs !== undefined
+        ? activeInn.striker.runs
+        : previousStrikerRuns + runs;
+
+      const events = buildCelebrationEvents({
+        eventType: 'Normal',
+        batRuns: runs,
+        previousStrikerRuns,
+        currentStrikerRuns,
+        strikerName,
+        isWicket: false,
+      });
+
+      const postBallAction = () => {
+        if (activeInn?.requiresNewBatsman) {
+          setNewBatsmanId(0);
+          setNewBatsmanModalOpen(true);
+        }
+      };
+
+      enqueueCelebrations(events, postBallAction);
     } catch (err: any) {
       setScorecardError(err.response?.data?.message || 'Failed to record delivery.');
     } finally {
@@ -561,6 +626,10 @@ export const Matches: React.FC<MatchesProps> = ({
 
   const handleRecordNoBall = async (batRuns: number) => {
     if (!activeLiveScore || !currentInnings || actionLoading) return;
+    const previousStriker = currentInnings.striker;
+    const previousStrikerRuns = previousStriker?.runs ?? 0;
+    const strikerName = previousStriker?.playerName || 'Striker';
+
     try {
       setActionLoading(true);
       setScorecardError(null);
@@ -578,6 +647,32 @@ export const Matches: React.FC<MatchesProps> = ({
       });
       setActiveLiveScore(updated);
       fetchMatches();
+
+      const activeInn = updated.activeInningsNumber === 1 ? updated.innings1 : updated.innings2;
+      const updatedStriker = activeInn?.battingPerformances?.find((b) => b.playerId === previousStriker?.playerId);
+      const currentStrikerRuns = updatedStriker
+        ? updatedStriker.runs
+        : activeInn?.striker?.playerId === previousStriker?.playerId && activeInn?.striker?.runs !== undefined
+        ? activeInn.striker.runs
+        : previousStrikerRuns + batRuns;
+
+      const events = buildCelebrationEvents({
+        eventType: 'NoBall',
+        batRuns,
+        previousStrikerRuns,
+        currentStrikerRuns,
+        strikerName,
+        isWicket: false,
+      });
+
+      const postNoBallAction = () => {
+        if (activeInn?.requiresNewBatsman) {
+          setNewBatsmanId(0);
+          setNewBatsmanModalOpen(true);
+        }
+      };
+
+      enqueueCelebrations(events, postNoBallAction);
     } catch (err: any) {
       setScorecardError(err.response?.data?.message || 'Failed to record No Ball.');
     } finally {
@@ -681,6 +776,17 @@ export const Matches: React.FC<MatchesProps> = ({
       return;
     }
 
+    const dismissedId = wicketDismissedPlayerId;
+    const dismissedBatsman =
+      currentInnings.striker?.playerId === dismissedId
+        ? currentInnings.striker
+        : currentInnings.nonStriker?.playerId === dismissedId
+        ? currentInnings.nonStriker
+        : team1Players.concat(team2Players).find((p) => p.id === dismissedId);
+    const dismissedName = dismissedBatsman
+      ? (dismissedBatsman as any).playerName || (dismissedBatsman as any).fullName || 'Batsman'
+      : 'Batsman';
+
     try {
       setActionLoading(true);
       setScorecardError(null);
@@ -695,10 +801,21 @@ export const Matches: React.FC<MatchesProps> = ({
       fetchMatches();
 
       const activeInn = updated.activeInningsNumber === 1 ? updated.innings1 : updated.innings2;
-      if (activeInn?.requiresNewBatsman) {
-        setNewBatsmanId(0);
-        setNewBatsmanModalOpen(true);
-      }
+
+      const events = buildCelebrationEvents({
+        isWicket: true,
+        wicketType,
+        dismissedPlayerName: dismissedName,
+      });
+
+      const postWicketAction = () => {
+        if (activeInn?.requiresNewBatsman) {
+          setNewBatsmanId(0);
+          setNewBatsmanModalOpen(true);
+        }
+      };
+
+      enqueueCelebrations(events, postWicketAction);
     } catch (err: any) {
       setScorecardError(err.response?.data?.message || 'Failed to record wicket.');
     } finally {
@@ -1547,6 +1664,12 @@ export const Matches: React.FC<MatchesProps> = ({
           </button>
         }
       >
+        {activeCelebration && (
+          <LiveScoringCelebration
+            event={activeCelebration}
+            onComplete={handleCelebrationComplete}
+          />
+        )}
         {scorecardLoading ? (
           <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
             <RotateCw className="spin" size={24} style={{ marginBottom: '0.5rem' }} />
