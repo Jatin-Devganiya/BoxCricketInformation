@@ -255,7 +255,10 @@ export const Matches: React.FC<MatchesProps> = ({
       // Pre-populate setup if active innings is not started yet
       const curr = live.activeInningsNumber === 1 ? live.innings1 : live.innings2;
       if (!curr || curr.status === 'Scheduled') {
-        const defaultBatTeam = live.activeInningsNumber === 1 ? live.match.team1Id : live.match.team2Id;
+        let defaultBatTeam = 0;
+        if (live.activeInningsNumber === 2 && live.innings1) {
+          defaultBatTeam = live.innings1.battingTeamId === live.match.team1Id ? live.match.team2Id : live.match.team1Id;
+        }
         setSetupInningsNumber(live.activeInningsNumber as 1 | 2);
         setSetupBattingTeamId(defaultBatTeam);
         setSetupStrikerId(0);
@@ -525,6 +528,57 @@ export const Matches: React.FC<MatchesProps> = ({
     }
   };
 
+  const getInningsTabLabel = (inningsNum: 1 | 2): string => {
+    if (!activeLiveScore) return inningsNum === 1 ? '1st Innings' : '2nd Innings';
+    const match = activeLiveScore.match;
+
+    if (inningsNum === 1) {
+      if (activeLiveScore.innings1?.battingTeamShortName) {
+        return `1st Innings (${activeLiveScore.innings1.battingTeamShortName})`;
+      }
+      if (setupBattingTeamId === match.team1Id) {
+        return `1st Innings (${match.team1ShortName})`;
+      }
+      if (setupBattingTeamId === match.team2Id) {
+        return `1st Innings (${match.team2ShortName})`;
+      }
+      return '1st Innings (Select Batting Team)';
+    } else {
+      if (activeLiveScore.innings2?.battingTeamShortName) {
+        return `2nd Innings (${activeLiveScore.innings2.battingTeamShortName})`;
+      }
+      const inn1TeamId = activeLiveScore.innings1?.battingTeamId || (setupBattingTeamId > 0 ? setupBattingTeamId : 0);
+      if (inn1TeamId === match.team1Id) {
+        return `2nd Innings (${match.team2ShortName})`;
+      }
+      if (inn1TeamId === match.team2Id) {
+        return `2nd Innings (${match.team1ShortName})`;
+      }
+      return '2nd Innings';
+    }
+  };
+
+  const getInningsTeamShortName = (inningsNum: 1 | 2): string => {
+    if (!activeLiveScore) return '';
+    const match = activeLiveScore.match;
+    if (inningsNum === 1) {
+      if (activeLiveScore.innings1?.battingTeamShortName) {
+        return activeLiveScore.innings1.battingTeamShortName;
+      }
+      if (setupBattingTeamId === match.team1Id) return match.team1ShortName;
+      if (setupBattingTeamId === match.team2Id) return match.team2ShortName;
+      return 'TBD';
+    } else {
+      if (activeLiveScore.innings2?.battingTeamShortName) {
+        return activeLiveScore.innings2.battingTeamShortName;
+      }
+      const inn1TeamId = activeLiveScore.innings1?.battingTeamId || (setupBattingTeamId > 0 ? setupBattingTeamId : 0);
+      if (inn1TeamId === match.team1Id) return match.team2ShortName;
+      if (inn1TeamId === match.team2Id) return match.team1ShortName;
+      return 'TBD';
+    }
+  };
+
   const currentInnings: LiveInnings | undefined =
     activeInningsTab === 1 ? activeLiveScore?.innings1 : activeLiveScore?.innings2;
 
@@ -537,11 +591,26 @@ export const Matches: React.FC<MatchesProps> = ({
   const bowlingPlayers =
     currentInnings?.battingTeamId === activeLiveScore?.match.team1Id ? team2Players : team1Players;
 
-  const setupBattingPlayers = setupBattingTeamId === activeLiveScore?.match.team1Id ? team1Players : team2Players;
-  const setupBowlingPlayers = setupBattingTeamId === activeLiveScore?.match.team1Id ? team2Players : team1Players;
+  const setupBattingPlayers =
+    setupBattingTeamId === activeLiveScore?.match.team1Id
+      ? team1Players
+      : setupBattingTeamId === activeLiveScore?.match.team2Id
+      ? team2Players
+      : [];
+
+  const setupBowlingPlayers =
+    setupBattingTeamId === activeLiveScore?.match.team1Id
+      ? team2Players
+      : setupBattingTeamId === activeLiveScore?.match.team2Id
+      ? team1Players
+      : [];
 
   const handleStartInnings = async () => {
     if (!activeLiveScore || actionLoading) return;
+    if (setupBattingTeamId === 0) {
+      setScorecardError('Please select which team will bat first.');
+      return;
+    }
     if (setupStrikerId === 0 || setupNonStrikerId === 0 || setupBowlerId === 0) {
       setScorecardError('Please select Striker, Non-Striker, and Opening Bowler.');
       return;
@@ -553,8 +622,9 @@ export const Matches: React.FC<MatchesProps> = ({
     try {
       setActionLoading(true);
       setScorecardError(null);
+      const targetInningsNumber = activeInningsTab;
       const updated = await liveScoringApi.startInnings(activeLiveScore.match.id, {
-        inningsNumber: setupInningsNumber,
+        inningsNumber: targetInningsNumber,
         battingTeamId: setupBattingTeamId,
         strikerPlayerId: setupStrikerId,
         nonStrikerPlayerId: setupNonStrikerId,
@@ -1754,22 +1824,62 @@ export const Matches: React.FC<MatchesProps> = ({
                 <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
                   <button
                     className={`btn btn-sm ${activeInningsTab === 1 ? 'btn-primary' : 'btn-secondary'}`}
-                    onClick={() => setActiveInningsTab(1)}
+                    onClick={() => {
+                      setActiveInningsTab(1);
+                      setSetupInningsNumber(1);
+                    }}
                   >
-                    1st Innings ({activeLiveScore.innings1?.battingTeamShortName || activeLiveScore.match.team1ShortName})
+                    {getInningsTabLabel(1)}
                     {activeLiveScore.innings1 && ` • ${activeLiveScore.innings1.runs}/${activeLiveScore.innings1.wickets}`}
                   </button>
                   <button
                     className={`btn btn-sm ${activeInningsTab === 2 ? 'btn-primary' : 'btn-secondary'}`}
-                    onClick={() => setActiveInningsTab(2)}
+                    onClick={() => {
+                      setActiveInningsTab(2);
+                      setSetupInningsNumber(2);
+                      if (activeLiveScore.innings1) {
+                        const oppTeamId = activeLiveScore.innings1.battingTeamId === activeLiveScore.match.team1Id
+                          ? activeLiveScore.match.team2Id
+                          : activeLiveScore.match.team1Id;
+                        setSetupBattingTeamId(oppTeamId);
+                      }
+                    }}
                   >
-                    2nd Innings ({activeLiveScore.innings2?.battingTeamShortName || activeLiveScore.match.team2ShortName})
+                    {getInningsTabLabel(2)}
                     {activeLiveScore.innings2 && ` • ${activeLiveScore.innings2.runs}/${activeLiveScore.innings2.wickets}`}
                   </button>
                 </div>
 
-                {/* State A: Innings Not Started -> Setup Wizard */}
-                {!isCurrentInningsStarted && !isCurrentInningsCompleted ? (
+                {/* State A: 2nd Innings selected before 1st Innings is completed */}
+                {activeInningsTab === 2 && (!activeLiveScore.innings1 || activeLiveScore.innings1.status !== 'Completed') ? (
+                  <div
+                    style={{
+                      background: 'rgba(255,255,255,0.02)',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: 'var(--radius-md)',
+                      padding: '2.5rem 1.5rem',
+                      textAlign: 'center',
+                    }}
+                  >
+                    <Clock size={36} style={{ color: 'var(--text-muted)', margin: '0 auto 0.75rem' }} />
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: '0 0 0.5rem 0' }}>
+                      2nd Innings Pending
+                    </h3>
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', maxWidth: '440px', margin: '0 auto 1.25rem' }}>
+                      The 1st Innings must be completed before 2nd Innings live scoring can begin.
+                    </p>
+                    <button
+                      className="btn btn-sm btn-primary"
+                      onClick={() => {
+                        setActiveInningsTab(1);
+                        setSetupInningsNumber(1);
+                      }}
+                    >
+                      Go to 1st Innings
+                    </button>
+                  </div>
+                ) : !isCurrentInningsStarted && !isCurrentInningsCompleted ? (
+                  /* State B: Innings Not Started -> Setup Wizard */
                   !canScoreLive ? (
                     <div
                       style={{
@@ -1798,46 +1908,198 @@ export const Matches: React.FC<MatchesProps> = ({
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.25rem' }}>
-                      <PlayCircle size={22} style={{ color: 'var(--accent-cricket)' }} />
-                      <div>
-                        <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>
-                          Start {activeInningsTab === 1 ? '1st' : '2nd'} Innings
-                        </h3>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                          Configure batting team, opening batsmen, and bowler to begin live ball-by-ball scoring.
+                        <PlayCircle size={22} style={{ color: 'var(--accent-cricket)' }} />
+                        <div>
+                          <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>
+                            Start {activeInningsTab === 1 ? '1st' : '2nd'} Innings
+                          </h3>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                            {activeInningsTab === 1
+                              ? 'Select which team is batting first, configure opening batsmen, and bowler to begin live scoring.'
+                              : `Configure chasing batsmen for the 2nd innings (Target: ${(activeLiveScore.innings1?.runs ?? 0) + 1} runs).`}
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="form-group" style={{ marginBottom: '1rem' }}>
-                      <label className="form-label">Batting Team *</label>
-                      <select
-                        className="form-select"
-                        value={setupBattingTeamId}
-                        onChange={(e) => {
-                          const val = Number(e.target.value);
-                          setSetupBattingTeamId(val);
-                          setSetupStrikerId(0);
-                          setSetupNonStrikerId(0);
-                          setSetupBowlerId(0);
-                        }}
-                      >
-                        <option value={0}>-- Select Batting Team --</option>
-                        <option value={activeLiveScore.match.team1Id}>{activeLiveScore.match.team1Name}</option>
-                        <option value={activeLiveScore.match.team2Id}>{activeLiveScore.match.team2Name}</option>
-                      </select>
-                    </div>
+                      {/* Batting Team Selection */}
+                      {activeInningsTab === 1 ? (
+                        <div style={{ marginBottom: '1.25rem' }}>
+                          <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                            <span style={{ fontWeight: 700 }}>Who is Batting First? (1st Innings) *</span>
+                            {setupBattingTeamId > 0 && (
+                              <span style={{ fontSize: '0.78rem', color: '#10b981', fontWeight: 600 }}>
+                                ✓ Batting Team Selected
+                              </span>
+                            )}
+                          </label>
 
-                    <div className="form-row" style={{ marginBottom: '1rem' }}>
-                      <div className="form-group">
-                        <label className="form-label">Striker Batsman *</label>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                            {/* Option 1: Team 1 */}
+                            <div
+                              onClick={() => {
+                                setSetupBattingTeamId(activeLiveScore.match.team1Id);
+                                setSetupStrikerId(0);
+                                setSetupNonStrikerId(0);
+                                setSetupBowlerId(0);
+                              }}
+                              style={{
+                                padding: '0.85rem 1rem',
+                                borderRadius: '8px',
+                                border: setupBattingTeamId === activeLiveScore.match.team1Id ? '2px solid #10b981' : '1px solid var(--border-color)',
+                                background: setupBattingTeamId === activeLiveScore.match.team1Id ? 'rgba(16, 185, 129, 0.12)' : 'rgba(255, 255, 255, 0.03)',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                                <div style={{ fontWeight: 700, fontSize: '0.95rem', color: setupBattingTeamId === activeLiveScore.match.team1Id ? '#10b981' : 'var(--text-primary)' }}>
+                                  {activeLiveScore.match.team1Name}
+                                </div>
+                                <span className="badge badge-secondary" style={{ fontSize: '0.72rem' }}>
+                                  {activeLiveScore.match.team1ShortName}
+                                </span>
+                              </div>
+                              <div style={{ fontSize: '0.78rem', color: setupBattingTeamId === activeLiveScore.match.team1Id ? '#10b981' : 'var(--text-muted)' }}>
+                                {setupBattingTeamId === activeLiveScore.match.team1Id
+                                  ? '🏏 Batting 1st (Innings 1)'
+                                  : setupBattingTeamId === activeLiveScore.match.team2Id
+                                  ? '⚾ Bowling 1st (Bats 2nd)'
+                                  : 'Click to select as 1st Innings'}
+                              </div>
+                            </div>
+
+                            {/* Option 2: Team 2 */}
+                            <div
+                              onClick={() => {
+                                setSetupBattingTeamId(activeLiveScore.match.team2Id);
+                                setSetupStrikerId(0);
+                                setSetupNonStrikerId(0);
+                                setSetupBowlerId(0);
+                              }}
+                              style={{
+                                padding: '0.85rem 1rem',
+                                borderRadius: '8px',
+                                border: setupBattingTeamId === activeLiveScore.match.team2Id ? '2px solid #10b981' : '1px solid var(--border-color)',
+                                background: setupBattingTeamId === activeLiveScore.match.team2Id ? 'rgba(16, 185, 129, 0.12)' : 'rgba(255, 255, 255, 0.03)',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                                <div style={{ fontWeight: 700, fontSize: '0.95rem', color: setupBattingTeamId === activeLiveScore.match.team2Id ? '#10b981' : 'var(--text-primary)' }}>
+                                  {activeLiveScore.match.team2Name}
+                                </div>
+                                <span className="badge badge-secondary" style={{ fontSize: '0.72rem' }}>
+                                  {activeLiveScore.match.team2ShortName}
+                                </span>
+                              </div>
+                              <div style={{ fontSize: '0.78rem', color: setupBattingTeamId === activeLiveScore.match.team2Id ? '#10b981' : 'var(--text-muted)' }}>
+                                {setupBattingTeamId === activeLiveScore.match.team2Id
+                                  ? '🏏 Batting 1st (Innings 1)'
+                                  : setupBattingTeamId === activeLiveScore.match.team1Id
+                                  ? '⚾ Bowling 1st (Bats 2nd)'
+                                  : 'Click to select as 1st Innings'}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Dynamic helper explanation */}
+                          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', background: 'rgba(255,255,255,0.02)', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px dashed var(--border-color)' }}>
+                            {setupBattingTeamId === activeLiveScore.match.team1Id ? (
+                              <span>👉 <strong>{activeLiveScore.match.team1Name}</strong> will bat in <strong>1st Innings</strong>. <strong>{activeLiveScore.match.team2Name}</strong> will bowl first and chase in <strong>2nd Innings</strong>.</span>
+                            ) : setupBattingTeamId === activeLiveScore.match.team2Id ? (
+                              <span>👉 <strong>{activeLiveScore.match.team2Name}</strong> will bat in <strong>1st Innings</strong>. <strong>{activeLiveScore.match.team1Name}</strong> will bowl first and chase in <strong>2nd Innings</strong>.</span>
+                            ) : (
+                              <span>⚠️ Please click on the team that won the toss or is batting first.</span>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        /* 2nd Innings fixed batting/bowling teams display */
+                        <div style={{ marginBottom: '1.25rem' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
+                            <div style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.35)', padding: '0.85rem 1rem', borderRadius: '8px' }}>
+                              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>2nd Innings Batting (Chasing)</div>
+                              <div style={{ fontWeight: 700, fontSize: '1rem', color: '#10b981', marginTop: '0.2rem' }}>
+                                {setupBattingTeamId === activeLiveScore.match.team1Id ? activeLiveScore.match.team1Name : activeLiveScore.match.team2Name}
+                              </div>
+                              <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                                Target: <strong>{(activeLiveScore.innings1?.runs ?? 0) + 1}</strong> runs in {activeLiveScore.match.requiredOvers} ov
+                              </div>
+                            </div>
+                            <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--border-color)', padding: '0.85rem 1rem', borderRadius: '8px' }}>
+                              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>2nd Innings Bowling (Defending)</div>
+                              <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)', marginTop: '0.2rem' }}>
+                                {setupBattingTeamId === activeLiveScore.match.team1Id ? activeLiveScore.match.team2Name : activeLiveScore.match.team1Name}
+                              </div>
+                              <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                                Defending: <strong>{activeLiveScore.innings1?.runs ?? 0}</strong> runs
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {setupBattingTeamId === 0 ? (
+                        <div className="alert alert-warning" style={{ fontSize: '0.82rem', padding: '0.7rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                          <AlertCircle size={15} /> Select which team is batting first above to choose opening batsmen and bowler.
+                        </div>
+                      ) : null}
+
+                      <div className="form-row" style={{ marginBottom: '1rem' }}>
+                        <div className="form-group">
+                          <label className="form-label">
+                            Striker Batsman {setupBattingTeamId > 0 && `(from ${setupBattingTeamId === activeLiveScore.match.team1Id ? activeLiveScore.match.team1Name : activeLiveScore.match.team2Name})`} *
+                          </label>
+                          <select
+                            className="form-select"
+                            value={setupStrikerId}
+                            disabled={setupBattingTeamId === 0}
+                            onChange={(e) => setSetupStrikerId(Number(e.target.value))}
+                          >
+                            <option value={0}>-- Select Striker --</option>
+                            {setupBattingPlayers.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.fullName} ({p.playerCategory})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="form-group">
+                          <label className="form-label">
+                            Non-Striker Batsman {setupBattingTeamId > 0 && `(from ${setupBattingTeamId === activeLiveScore.match.team1Id ? activeLiveScore.match.team1Name : activeLiveScore.match.team2Name})`} *
+                          </label>
+                          <select
+                            className="form-select"
+                            value={setupNonStrikerId}
+                            disabled={setupBattingTeamId === 0}
+                            onChange={(e) => setSetupNonStrikerId(Number(e.target.value))}
+                          >
+                            <option value={0}>-- Select Non-Striker --</option>
+                            {setupBattingPlayers
+                              .filter((p) => p.id !== setupStrikerId)
+                              .map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.fullName} ({p.playerCategory})
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                        <label className="form-label">
+                          Opening Bowler {setupBattingTeamId > 0 && `(from ${setupBattingTeamId === activeLiveScore.match.team1Id ? activeLiveScore.match.team2Name : activeLiveScore.match.team1Name})`} *
+                        </label>
                         <select
                           className="form-select"
-                          value={setupStrikerId}
-                          onChange={(e) => setSetupStrikerId(Number(e.target.value))}
+                          value={setupBowlerId}
+                          disabled={setupBattingTeamId === 0}
+                          onChange={(e) => setSetupBowlerId(Number(e.target.value))}
                         >
-                          <option value={0}>-- Select Striker --</option>
-                          {setupBattingPlayers.map((p) => (
+                          <option value={0}>-- Select Bowler --</option>
+                          {setupBowlingPlayers.map((p) => (
                             <option key={p.id} value={p.id}>
                               {p.fullName} ({p.playerCategory})
                             </option>
@@ -1845,57 +2107,23 @@ export const Matches: React.FC<MatchesProps> = ({
                         </select>
                       </div>
 
-                      <div className="form-group">
-                        <label className="form-label">Non-Striker Batsman *</label>
-                        <select
-                          className="form-select"
-                          value={setupNonStrikerId}
-                          onChange={(e) => setSetupNonStrikerId(Number(e.target.value))}
-                        >
-                          <option value={0}>-- Select Non-Striker --</option>
-                          {setupBattingPlayers
-                            .filter((p) => p.id !== setupStrikerId)
-                            .map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.fullName} ({p.playerCategory})
-                              </option>
-                            ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-                      <label className="form-label">Opening Bowler (from Opposition) *</label>
-                      <select
-                        className="form-select"
-                        value={setupBowlerId}
-                        onChange={(e) => setSetupBowlerId(Number(e.target.value))}
+                      <button
+                        className="btn btn-primary"
+                        style={{ width: '100%', padding: '0.85rem' }}
+                        onClick={handleStartInnings}
+                        disabled={
+                          actionLoading ||
+                          setupBattingTeamId === 0 ||
+                          setupStrikerId === 0 ||
+                          setupNonStrikerId === 0 ||
+                          setupBowlerId === 0 ||
+                          !canLiveScore(activeLiveScore.match.status, seriesList.find((s) => s.id === activeLiveScore.match.seriesId)?.status) ||
+                          !canScoreLive
+                        }
                       >
-                        <option value={0}>-- Select Bowler --</option>
-                        {setupBowlingPlayers.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.fullName} ({p.playerCategory})
-                          </option>
-                        ))}
-                      </select>
+                        <PlayCircle size={18} /> {actionLoading ? 'Starting...' : 'Start Live Scoring'}
+                      </button>
                     </div>
-
-                    <button
-                      className="btn btn-primary"
-                      style={{ width: '100%', padding: '0.85rem' }}
-                      onClick={handleStartInnings}
-                      disabled={
-                        actionLoading ||
-                        setupStrikerId === 0 ||
-                        setupNonStrikerId === 0 ||
-                        setupBowlerId === 0 ||
-                        !canLiveScore(activeLiveScore.match.status, seriesList.find((s) => s.id === activeLiveScore.match.seriesId)?.status) ||
-                        !canScoreLive
-                      }
-                    >
-                      <PlayCircle size={18} /> {actionLoading ? 'Starting...' : 'Start Live Scoring'}
-                    </button>
-                  </div>
                   )
                 ) : isCurrentInningsCompleted ? (
                   /* State B: Innings Completed */
@@ -2554,13 +2782,13 @@ export const Matches: React.FC<MatchesProps> = ({
                     className={`btn btn-sm ${activeInningsTab === 1 ? 'btn-primary' : 'btn-secondary'}`}
                     onClick={() => setActiveInningsTab(1)}
                   >
-                    1st Innings Scorecard
+                    1st Innings ({getInningsTeamShortName(1)}) Scorecard
                   </button>
                   <button
                     className={`btn btn-sm ${activeInningsTab === 2 ? 'btn-primary' : 'btn-secondary'}`}
                     onClick={() => setActiveInningsTab(2)}
                   >
-                    2nd Innings Scorecard
+                    2nd Innings ({getInningsTeamShortName(2)}) Scorecard
                   </button>
                 </div>
 
