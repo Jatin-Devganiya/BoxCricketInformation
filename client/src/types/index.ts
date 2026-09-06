@@ -257,6 +257,7 @@ export interface LiveBowler {
   runsConceded: number;
   wickets: number;
   maidenOvers: number;
+  hatTricks: number;
   wides: number;
   noBalls: number;
   economyRate: number;

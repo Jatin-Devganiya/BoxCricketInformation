@@ -554,5 +554,51 @@ END
 
             await context.SaveChangesAsync();
         }
+
+        // 8. Synchronize historical Hat-Tricks from actual delivery sequences
+        await SyncHistoricalHatTricksAsync(context);
+    }
+
+    public static async Task SyncHistoricalHatTricksAsync(CricketDbContext context)
+    {
+        try
+        {
+            var inningsWithEvents = await context.MatchInnings
+                .Include(i => i.BowlingPerformances)
+                .Where(i => context.BallEvents.Any(b => b.InningsId == i.Id))
+                .ToListAsync();
+
+            bool hasChanges = false;
+            foreach (var inn in inningsWithEvents)
+            {
+                var events = await context.BallEvents
+                    .Where(b => b.InningsId == inn.Id)
+                    .OrderBy(b => b.Id)
+                    .ToListAsync();
+
+                var bowlerIds = events.Select(e => e.BowlerPlayerId).Distinct().ToList();
+                foreach (var bId in bowlerIds)
+                {
+                    var bEvents = events.Where(e => e.BowlerPlayerId == bId).OrderBy(e => e.Id).ToList();
+                    int calculatedHt = CricketApp.Api.Services.CricketCalculationHelper.CalculateHatTricks(bEvents);
+
+                    var bowl = inn.BowlingPerformances.FirstOrDefault(b => b.PlayerId == bId);
+                    if (bowl != null && bowl.HatTricks != calculatedHt)
+                    {
+                        bowl.HatTricks = calculatedHt;
+                        hasChanges = true;
+                    }
+                }
+            }
+
+            if (hasChanges)
+            {
+                await context.SaveChangesAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Historical Hat-Trick sync note: {ex.Message}");
+        }
     }
 }

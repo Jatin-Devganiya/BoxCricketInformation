@@ -860,6 +860,7 @@ export const Matches: React.FC<MatchesProps> = ({
     try {
       setActionLoading(true);
       setScorecardError(null);
+      const prevBowlerHatTricks = currentInnings.currentBowler?.hatTricks ?? 0;
       const updated = await liveScoringApi.recordWicket(activeLiveScore.match.id, currentInnings.id, {
         dismissedPlayerId: wicketDismissedPlayerId,
         wicketType,
@@ -871,11 +872,16 @@ export const Matches: React.FC<MatchesProps> = ({
       fetchMatches();
 
       const activeInn = updated.activeInningsNumber === 1 ? updated.innings1 : updated.innings2;
+      const updatedBowlerHatTricks = activeInn?.currentBowler?.hatTricks ?? 0;
+      const isHatTrick = updatedBowlerHatTricks > prevBowlerHatTricks;
+      const bowlerName = activeInn?.currentBowler?.playerName || currentInnings.currentBowler?.playerName;
 
       const events = buildCelebrationEvents({
         isWicket: true,
         wicketType,
         dismissedPlayerName: dismissedName,
+        isHatTrick,
+        bowlerName: isHatTrick ? bowlerName : undefined,
       });
 
       const postWicketAction = () => {
@@ -2386,6 +2392,11 @@ export const Matches: React.FC<MatchesProps> = ({
                           <span>Econ: <strong>{currentInnings?.currentBowler?.economyRate ?? 0}</strong></span>
                           <span>Wd: <strong>{currentInnings?.currentBowler?.wides ?? 0}</strong></span>
                           <span>Nb: <strong>{currentInnings?.currentBowler?.noBalls ?? 0}</strong></span>
+                          {(currentInnings?.currentBowler?.hatTricks ?? 0) > 0 && (
+                            <span style={{ color: '#ec4899', fontWeight: 600 }}>
+                              🎩 HT: <strong>{currentInnings?.currentBowler?.hatTricks}</strong>
+                            </span>
+                          )}
                         </div>
                         {canScoreLive && currentInnings?.canChangeBowlerPreOver && (
                           <button
@@ -2897,6 +2908,7 @@ export const Matches: React.FC<MatchesProps> = ({
                             <th>M</th>
                             <th>R</th>
                             <th>W</th>
+                            <th>HT</th>
                             <th>Econ</th>
                             <th>Wd</th>
                             <th>Nb</th>
@@ -2905,7 +2917,7 @@ export const Matches: React.FC<MatchesProps> = ({
                         <tbody>
                           {currentInnings.bowlingPerformances.length === 0 ? (
                             <tr>
-                              <td colSpan={9} style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-muted)' }}>
+                              <td colSpan={10} style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-muted)' }}>
                                 No bowling figures recorded yet.
                               </td>
                             </tr>
@@ -2918,6 +2930,9 @@ export const Matches: React.FC<MatchesProps> = ({
                                 <td>{bowl.maidenOvers}</td>
                                 <td style={{ fontWeight: 700 }}>{bowl.runsConceded}</td>
                                 <td style={{ fontWeight: 800, color: '#ef4444' }}>{bowl.wickets}</td>
+                                <td style={{ fontWeight: 700, color: (bowl.hatTricks || 0) > 0 ? '#ec4899' : 'inherit' }}>
+                                  {(bowl.hatTricks || 0) > 0 ? `🎩 ${bowl.hatTricks}` : '0'}
+                                </td>
                                 <td>{bowl.economyRate}</td>
                                 <td>{bowl.wides}</td>
                                 <td>{bowl.noBalls}</td>

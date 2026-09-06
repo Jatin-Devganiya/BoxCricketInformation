@@ -190,6 +190,13 @@ export const playCelebrationSound = (type: CelebrationType): void => {
         playFanfare(ctx, [261.63, 392.0, 523.25, 659.25, 783.99], 0.18);
         setTimeout(() => playCrowdCheer(ctx, 3.2, 0.9), 300);
         break;
+
+      case 'HAT_TRICK':
+        // Stumps crash + high fanfare + roaring crowd
+        playStumpsCrash(ctx);
+        setTimeout(() => playFanfare(ctx, [392.0, 523.25, 659.25, 783.99, 1046.5], 0.15), 120);
+        setTimeout(() => playCrowdCheer(ctx, 3.5, 0.95), 200);
+        break;
     }
   } catch (err) {
     // Non-critical: Audio autoplay or synth failure should never block UI

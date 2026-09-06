@@ -1,4 +1,4 @@
-export type CelebrationType = 'SIX' | 'FOUR' | 'WICKET' | 'FIFTY' | 'CENTURY' | 'MILESTONE';
+export type CelebrationType = 'SIX' | 'FOUR' | 'WICKET' | 'FIFTY' | 'CENTURY' | 'MILESTONE' | 'HAT_TRICK';
 
 export interface CelebrationEvent {
   id: string;
@@ -96,11 +96,13 @@ export interface BuildCelebrationParams {
   isWicket?: boolean;
   wicketType?: string;
   dismissedPlayerName?: string;
+  isHatTrick?: boolean;
+  bowlerName?: string;
 }
 
 /**
  * Builds a prioritized queue of celebration events.
- * Priority order per requirements: WICKET -> MILESTONE (FIFTY/CENTURY) -> SIX -> FOUR.
+ * Priority order per requirements: WICKET -> HAT_TRICK -> MILESTONE (FIFTY/CENTURY) -> SIX -> FOUR.
  */
 export const buildCelebrationEvents = (params: BuildCelebrationParams): CelebrationEvent[] => {
   const events: CelebrationEvent[] = [];
@@ -115,6 +117,17 @@ export const buildCelebrationEvents = (params: BuildCelebrationParams): Celebrat
       wicketType: params.wicketType || 'Out',
       subtitle: params.wicketType ? `${params.wicketType}!` : 'Wicket Down!',
       durationMs: 2500,
+    });
+  }
+
+  // 1b. HAT-TRICK Event
+  if (params.isHatTrick && params.bowlerName) {
+    events.push({
+      id: `hattrick-${timestamp}`,
+      type: 'HAT_TRICK',
+      playerName: params.bowlerName,
+      subtitle: '3 Wickets in 3 Consecutive Balls!',
+      durationMs: 4000,
     });
   }
 

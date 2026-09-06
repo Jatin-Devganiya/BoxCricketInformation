@@ -428,6 +428,8 @@ public class LiveScoringService : ILiveScoringService
                 }
             }
 
+            int hatTricks = CricketCalculationHelper.CalculateHatTricks(bowlerEvents);
+
             bowlerDto = new LiveBowlerDto
             {
                 PlayerId = inn.CurrentBowlerId.Value,
@@ -437,6 +439,7 @@ public class LiveScoringService : ILiveScoringService
                 RunsConceded = conceded,
                 Wickets = wickets,
                 MaidenOvers = maidenCount,
+                HatTricks = hatTricks,
                 Wides = wides,
                 NoBalls = noBalls,
                 EconomyRate = CricketCalculationHelper.CalculateEconomyRate(conceded, legalBalls)
@@ -1394,10 +1397,13 @@ public class LiveScoringService : ILiveScoringService
                 inn.BowlingPerformances.Add(bowl);
             }
 
+            int hatTricks = CricketCalculationHelper.CalculateHatTricks(bEvents);
+
             bowl.BallsBowled = ballsBowled;
             bowl.RunsConceded = conceded;
             bowl.Wickets = wickets;
             bowl.MaidenOvers = maidenCount;
+            bowl.HatTricks = hatTricks;
             bowl.Wides = wides;
             bowl.NoBalls = noBalls;
         }

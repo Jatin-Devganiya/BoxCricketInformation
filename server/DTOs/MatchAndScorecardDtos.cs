@@ -334,6 +334,7 @@ public class LiveBowlerDto
     public int RunsConceded { get; set; }
     public int Wickets { get; set; }
     public int MaidenOvers { get; set; }
+    public int HatTricks { get; set; }
     public int Wides { get; set; }
     public int NoBalls { get; set; }
     public double EconomyRate { get; set; }

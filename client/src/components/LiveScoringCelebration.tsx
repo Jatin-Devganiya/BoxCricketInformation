@@ -40,7 +40,9 @@ export const LiveScoringCelebration: React.FC<LiveScoringCelebrationProps> = ({
     canvas.height = window.innerHeight;
 
     const colors =
-      event.type === 'WICKET'
+      event.type === 'HAT_TRICK'
+        ? ['#ec4899', '#f43f5e', '#8b5cf6', '#fbbf24', '#ffffff']
+        : event.type === 'WICKET'
         ? ['#ef4444', '#f87171', '#f59e0b', '#dc2626', '#ffffff']
         : event.type === 'FIFTY'
         ? ['#fbbf24', '#f59e0b', '#d97706', '#fef08a', '#10b981']
@@ -64,7 +66,8 @@ export const LiveScoringCelebration: React.FC<LiveScoringCelebrationProps> = ({
     }
 
     const particles: Particle[] = [];
-    const particleCount = event.type === 'CENTURY' || event.type === 'MILESTONE' ? 80 : 55;
+    const particleCount =
+      event.type === 'HAT_TRICK' || event.type === 'CENTURY' || event.type === 'MILESTONE' ? 85 : 55;
 
     // Spurt from center or bottom
     const originX = canvas.width / 2;
@@ -289,6 +292,60 @@ export const LiveScoringCelebration: React.FC<LiveScoringCelebrationProps> = ({
                   : event.type === 'CENTURY'
                   ? 'What a Century!'
                   : 'Incredible Innings!')}
+            </p>
+          </div>
+        )}
+
+        {/* 5. HAT-TRICK CELEBRATION */}
+        {event.type === 'HAT_TRICK' && (
+          <div className="celebration-content">
+            <div className="celebration-visual-box">
+              <div className="milestone-trophy-wrap">
+                <div
+                  className="milestone-halo"
+                  style={{
+                    background:
+                      'radial-gradient(circle, rgba(236,72,153,0.45) 0%, rgba(139,92,246,0.2) 50%, transparent 70%)',
+                  }}
+                />
+                <div style={{ fontSize: '3.6rem', filter: 'drop-shadow(0 0 16px rgba(236,72,153,0.7))' }}>
+                  🎩⚡🔥
+                </div>
+              </div>
+            </div>
+
+            <div className="celebration-badge-row">
+              <span
+                className="celebration-pill pill-hattrick"
+                style={{
+                  background: 'linear-gradient(135deg, #ec4899, #8b5cf6)',
+                  color: '#ffffff',
+                  border: '1px solid #f472b6',
+                  boxShadow: '0 0 16px rgba(236,72,153,0.5)',
+                  fontWeight: 700,
+                  letterSpacing: '0.08em',
+                }}
+              >
+                🔥 HAT-TRICK! 🔥
+              </span>
+            </div>
+
+            <h1
+              className="celebration-title title-hattrick"
+              style={{
+                color: '#f43f5e',
+                textShadow: '0 0 24px rgba(244,63,94,0.7)',
+                fontSize: '2.6rem',
+                letterSpacing: '0.05em',
+              }}
+            >
+              HAT-TRICK!
+            </h1>
+
+            <div className="celebration-player-name">{event.playerName}</div>
+
+            <p className="celebration-subtitle">
+              {event.subtitle || '3 Wickets in 3 Consecutive Balls!'}
             </p>
           </div>
         )}
