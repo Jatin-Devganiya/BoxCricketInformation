@@ -15,6 +15,8 @@ public class PlayerDto
     public int TotalWickets { get; set; }
     public int? BattingRank { get; set; }
     public int? BowlingRank { get; set; }
+    public int? CreatedByUserId { get; set; }
+    public string? CreatedByUsername { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 
@@ -103,6 +105,8 @@ public class TeamDto
     public string ShortName { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public int PlayerCount { get; set; }
+    public int? CreatedByUserId { get; set; }
+    public string? CreatedByUsername { get; set; }
 }
 
 public class TeamDetailDto
@@ -111,6 +115,8 @@ public class TeamDetailDto
     public string Name { get; set; } = string.Empty;
     public string ShortName { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
+    public int? CreatedByUserId { get; set; }
+    public string? CreatedByUsername { get; set; }
     public List<PlayerDto> Players { get; set; } = new();
 }
 

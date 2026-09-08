@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using CricketApp.Api.Attributes;
 using CricketApp.Api.Data;
 using CricketApp.Api.DTOs;
@@ -30,6 +31,29 @@ public class MatchesController : ControllerBase
         _statusValidationService = statusValidationService;
     }
 
+    private int? GetCurrentUserId()
+    {
+        var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        return int.TryParse(claim, out var id) ? id : null;
+    }
+
+    private bool IsAdmin()
+    {
+        return User.IsInRole("Admin");
+    }
+
+    private bool CanModifyMatch(Match match)
+    {
+        if (IsAdmin()) return true;
+        var currentUserId = GetCurrentUserId();
+        if (!currentUserId.HasValue) return false;
+
+        // An umpire owns the match if match.CreatedByUserId == currentUserId
+        // or if parent series CreatedByUserId == currentUserId
+        return (match.CreatedByUserId.HasValue && match.CreatedByUserId.Value == currentUserId.Value)
+            || (match.Series != null && match.Series.CreatedByUserId.HasValue && match.Series.CreatedByUserId.Value == currentUserId.Value);
+    }
+
     [HttpGet]
     public async Task<IActionResult> GetMatches([FromQuery] int? seriesId, [FromQuery] string? status, [FromQuery] DateTime? date, [FromQuery] string? sortOrder)
     {
@@ -39,6 +63,7 @@ public class MatchesController : ControllerBase
             .Include(m => m.Team2)
             .Include(m => m.WinningTeam)
             .Include(m => m.MOMPlayer)
+            .Include(m => m.CreatedByUser)
             .AsQueryable();
 
         if (seriesId.HasValue && seriesId.Value > 0)
@@ -97,7 +122,9 @@ public class MatchesController : ControllerBase
                 m.WinningMargin,
                 m.MOMPlayerId,
                 MOMPlayerName = m.MOMPlayer != null ? $"{m.MOMPlayer.FirstName} {m.MOMPlayer.LastName}" : null,
-                m.MOMScore
+                m.MOMScore,
+                m.CreatedByUserId,
+                CreatedByUsername = m.CreatedByUser != null ? m.CreatedByUser.Username : null
             })
             .ToListAsync();
 
@@ -125,7 +152,9 @@ public class MatchesController : ControllerBase
             WinningMargin = m.WinningMargin,
             MOMPlayerId = m.MOMPlayerId,
             MOMPlayerName = m.MOMPlayerName,
-            MOMScore = m.MOMScore
+            MOMScore = m.MOMScore,
+            CreatedByUserId = m.CreatedByUserId,
+            CreatedByUsername = m.CreatedByUsername
         }).ToList();
 
         return Ok(matches);
@@ -140,6 +169,7 @@ public class MatchesController : ControllerBase
             .Include(m => m.Team2)
             .Include(m => m.WinningTeam)
             .Include(m => m.MOMPlayer)
+            .Include(m => m.CreatedByUser)
             .FirstOrDefaultAsync(m => m.Id == id);
 
         if (m == null) return NotFound(new { message = "Match not found." });
@@ -165,7 +195,9 @@ public class MatchesController : ControllerBase
             WinningTeamName = m.WinningTeam?.Name,
             Result = FormatMatchResult(m.Result, m.Team1.Name, m.Team2.Name),
             MOMPlayerId = m.MOMPlayerId,
-            MOMPlayerName = m.MOMPlayer != null ? $"{m.MOMPlayer.FirstName} {m.MOMPlayer.LastName}" : null
+            MOMPlayerName = m.MOMPlayer != null ? $"{m.MOMPlayer.FirstName} {m.MOMPlayer.LastName}" : null,
+            CreatedByUserId = m.CreatedByUserId,
+            CreatedByUsername = m.CreatedByUser?.Username
         });
     }
 
@@ -196,6 +228,16 @@ public class MatchesController : ControllerBase
         var series = await _context.Series.FindAsync(req.SeriesId);
         if (series == null) return BadRequest(new { message = "Selected series does not exist." });
 
+        // Ownership enforcement: Only the owner of the Series (or Admin) can create matches under it
+        if (!IsAdmin())
+        {
+            var currentUserId = GetCurrentUserId();
+            if (series.CreatedByUserId.HasValue && series.CreatedByUserId.Value != currentUserId)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "Access denied. You can only create matches under a series that you own." });
+            }
+        }
+
         var createValidation = _statusValidationService.ValidateMatchCreation(series, req.Status);
         if (!createValidation.IsValid)
         {
@@ -220,6 +262,7 @@ public class MatchesController : ControllerBase
             ScheduledTime = string.IsNullOrWhiteSpace(req.ScheduledTime) ? "18:00" : req.ScheduledTime.Trim(),
             Address = req.Address?.Trim() ?? string.Empty,
             Status = string.IsNullOrWhiteSpace(req.Status) ? "Scheduled" : req.Status.Trim(),
+            CreatedByUserId = GetCurrentUserId(),
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -243,7 +286,9 @@ public class MatchesController : ControllerBase
             ScheduledDate = match.ScheduledDate,
             ScheduledTime = match.ScheduledTime,
             Address = match.Address,
-            Status = match.Status
+            Status = match.Status,
+            CreatedByUserId = match.CreatedByUserId,
+            CreatedByUsername = User.Identity?.Name
         });
     }
 
@@ -257,6 +302,7 @@ public class MatchesController : ControllerBase
         }
 
         var match = await _context.Matches
+            .Include(m => m.Series)
             .Include(m => m.Innings)
                 .ThenInclude(i => i.BattingPerformances)
             .Include(m => m.Innings)
@@ -266,8 +312,19 @@ public class MatchesController : ControllerBase
             .FirstOrDefaultAsync(m => m.Id == id);
         if (match == null) return NotFound(new { message = "Match not found." });
 
+        // Ownership enforcement: Only the owner of the match (or Admin) can update it
+        if (!CanModifyMatch(match))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Access denied. You can only modify matches that you own." });
+        }
+
         var targetSeries = await _context.Series.FindAsync(req.SeriesId);
         if (targetSeries == null) return BadRequest(new { message = "Selected series does not exist." });
+
+        if (!IsAdmin() && targetSeries.CreatedByUserId.HasValue && targetSeries.CreatedByUserId.Value != GetCurrentUserId())
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Access denied. You cannot move a match to a series owned by another umpire." });
+        }
 
         var updateValidation = _statusValidationService.ValidateMatchStatusTransition(match, targetSeries, req.Status);
         if (!updateValidation.IsValid)
@@ -300,6 +357,12 @@ public class MatchesController : ControllerBase
     {
         var match = await _context.Matches.Include(m => m.Series).FirstOrDefaultAsync(m => m.Id == id);
         if (match == null) return NotFound(new { message = "Match not found." });
+
+        // Ownership enforcement: Only the owner of the match (or Admin) can delete it
+        if (!CanModifyMatch(match))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Access denied. You can only delete matches that you own." });
+        }
 
         var cancelValidation = _statusValidationService.ValidateMatchCancellation(match, match.Series);
         if (!cancelValidation.IsValid)
@@ -340,6 +403,12 @@ public class MatchesController : ControllerBase
             .FirstOrDefaultAsync(m => m.Id == id);
         if (match == null) return NotFound(new { message = "Match not found." });
 
+        // Ownership enforcement: Only the owner (or Admin) can modify scorecard
+        if (!CanModifyMatch(match))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Access denied. You can only modify scorecards for matches that you own." });
+        }
+
         if (!string.IsNullOrWhiteSpace(req.Status))
         {
             var statusValidation = _statusValidationService.ValidateMatchStatusTransition(match, match.Series, req.Status);
@@ -375,6 +444,11 @@ public class MatchesController : ControllerBase
         var match = await _context.Matches.Include(m => m.Series).FirstOrDefaultAsync(m => m.Id == id);
         if (match == null) return NotFound(new { message = "Match not found." });
 
+        if (!CanModifyMatch(match))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Access denied. You can only live-score matches that you own." });
+        }
+
         var transitionValidation = _statusValidationService.ValidateMatchStatusTransition(match, match.Series, "InProgress");
         if (!transitionValidation.IsValid)
         {
@@ -399,6 +473,11 @@ public class MatchesController : ControllerBase
     {
         var match = await _context.Matches.Include(m => m.Series).FirstOrDefaultAsync(m => m.Id == id);
         if (match == null) return NotFound(new { message = "Match not found." });
+
+        if (!CanModifyMatch(match))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Access denied. You can only live-score matches that you own." });
+        }
 
         var scoringValidation = _statusValidationService.ValidateLiveScoringAllowed(match, match.Series);
         if (!scoringValidation.IsValid)
@@ -425,6 +504,11 @@ public class MatchesController : ControllerBase
         var match = await _context.Matches.Include(m => m.Series).FirstOrDefaultAsync(m => m.Id == id);
         if (match == null) return NotFound(new { message = "Match not found." });
 
+        if (!CanModifyMatch(match))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Access denied. You can only live-score matches that you own." });
+        }
+
         var scoringValidation = _statusValidationService.ValidateLiveScoringAllowed(match, match.Series);
         if (!scoringValidation.IsValid)
         {
@@ -449,6 +533,11 @@ public class MatchesController : ControllerBase
     {
         var match = await _context.Matches.Include(m => m.Series).FirstOrDefaultAsync(m => m.Id == id);
         if (match == null) return NotFound(new { message = "Match not found." });
+
+        if (!CanModifyMatch(match))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Access denied. You can only live-score matches that you own." });
+        }
 
         var scoringValidation = _statusValidationService.ValidateLiveScoringAllowed(match, match.Series);
         if (!scoringValidation.IsValid)
@@ -475,6 +564,11 @@ public class MatchesController : ControllerBase
         var match = await _context.Matches.Include(m => m.Series).FirstOrDefaultAsync(m => m.Id == id);
         if (match == null) return NotFound(new { message = "Match not found." });
 
+        if (!CanModifyMatch(match))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Access denied. You can only live-score matches that you own." });
+        }
+
         var scoringValidation = _statusValidationService.ValidateLiveScoringAllowed(match, match.Series);
         if (!scoringValidation.IsValid)
         {
@@ -499,6 +593,11 @@ public class MatchesController : ControllerBase
     {
         var match = await _context.Matches.Include(m => m.Series).FirstOrDefaultAsync(m => m.Id == id);
         if (match == null) return NotFound(new { message = "Match not found." });
+
+        if (!CanModifyMatch(match))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Access denied. You can only live-score matches that you own." });
+        }
 
         var scoringValidation = _statusValidationService.ValidateLiveScoringAllowed(match, match.Series);
         if (!scoringValidation.IsValid)
@@ -526,6 +625,11 @@ public class MatchesController : ControllerBase
             .FirstOrDefaultAsync(m => m.Id == id);
         if (match == null) return NotFound(new { message = "Match not found." });
 
+        if (!CanModifyMatch(match))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Access denied. You can only live-score matches that you own." });
+        }
+
         var completeValidation = _statusValidationService.ValidateMatchStatusTransition(match, match.Series, "Completed");
         if (!completeValidation.IsValid)
         {
@@ -541,6 +645,14 @@ public class MatchesController : ControllerBase
     [HttpGet("{id}/innings/{inningsId}/eligible-bowlers")]
     public async Task<IActionResult> GetEligibleBowlers(int id, int inningsId)
     {
+        var match = await _context.Matches.Include(m => m.Series).FirstOrDefaultAsync(m => m.Id == id);
+        if (match == null) return NotFound(new { message = "Match not found." });
+
+        if (!CanModifyMatch(match))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Access denied. You can only access live-scoring controls for matches that you own." });
+        }
+
         var result = await _liveScoringService.GetEligibleBowlersAsync(id, inningsId);
         if (result == null) return NotFound(new { message = "Match or Innings not found." });
         return Ok(result);
@@ -552,6 +664,11 @@ public class MatchesController : ControllerBase
     {
         var match = await _context.Matches.Include(m => m.Series).FirstOrDefaultAsync(m => m.Id == id);
         if (match == null) return NotFound(new { message = "Match not found." });
+
+        if (!CanModifyMatch(match))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Access denied. You can only live-score matches that you own." });
+        }
 
         var scoringValidation = _statusValidationService.ValidateLiveScoringAllowed(match, match.Series);
         if (!scoringValidation.IsValid)
@@ -577,6 +694,11 @@ public class MatchesController : ControllerBase
     {
         var match = await _context.Matches.Include(m => m.Series).FirstOrDefaultAsync(m => m.Id == id);
         if (match == null) return NotFound(new { message = "Match not found." });
+
+        if (!CanModifyMatch(match))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Access denied. You can only live-score matches that you own." });
+        }
 
         var scoringValidation = _statusValidationService.ValidateLiveScoringAllowed(match, match.Series);
         if (!scoringValidation.IsValid)

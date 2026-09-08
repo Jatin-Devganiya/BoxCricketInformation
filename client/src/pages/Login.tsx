@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { Activity, Lock, User as UserIcon, AlertCircle, Sun, Moon } from 'lucide-react';
+import { Activity, Lock, User as UserIcon, AlertCircle, AlertTriangle, Sun, Moon } from 'lucide-react';
 
 export const Login: React.FC = () => {
-  const { login } = useAuth();
+  const { login, sessionTerminatedNotice, clearSessionTerminatedNotice } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -23,7 +23,8 @@ export const Login: React.FC = () => {
       setLoading(true);
       await login(username, password);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Login failed. Please check credentials.');
+      const msg = err.response?.data?.message || 'Login failed. Please check credentials.';
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -32,6 +33,8 @@ export const Login: React.FC = () => {
   const handleQuickFill = (u: string, p: string) => {
     setUsername(u);
     setPassword(p);
+    setError(null);
+    clearSessionTerminatedNotice();
   };
 
   return (
@@ -70,7 +73,7 @@ export const Login: React.FC = () => {
         className="card"
         style={{
           width: '100%',
-          maxWidth: '420px',
+          maxWidth: '440px',
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
           border: '1px solid rgba(255, 255, 255, 0.12)',
         }}
@@ -90,10 +93,39 @@ export const Login: React.FC = () => {
           </p>
         </div>
 
+        {sessionTerminatedNotice && !error && (
+          <div
+            className="alert alert-warning"
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '0.5rem',
+              background: 'rgba(245, 158, 11, 0.15)',
+              borderColor: '#f59e0b',
+              color: '#fbbf24',
+              marginBottom: '1rem',
+            }}
+          >
+            <AlertTriangle size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
+            <div style={{ fontSize: '0.875rem' }}>
+              <strong>Notice: </strong>
+              {sessionTerminatedNotice}
+            </div>
+          </div>
+        )}
+
         {error && (
-          <div className="alert alert-danger">
-            <AlertCircle size={16} />
-            <span>{error}</span>
+          <div
+            className="alert alert-danger"
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '0.5rem',
+              marginBottom: '1rem',
+            }}
+          >
+            <AlertCircle size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
+            <div style={{ fontSize: '0.875rem' }}>{error}</div>
           </div>
         )}
 
@@ -117,7 +149,10 @@ export const Login: React.FC = () => {
                 style={{ paddingLeft: '2.4rem' }}
                 placeholder="Enter username"
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  setError(null);
+                }}
                 autoFocus
               />
             </div>
@@ -142,7 +177,10 @@ export const Login: React.FC = () => {
                 style={{ paddingLeft: '2.4rem' }}
                 placeholder="Enter password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setError(null);
+                }}
               />
             </div>
           </div>
@@ -165,10 +203,10 @@ export const Login: React.FC = () => {
             textAlign: 'center',
           }}
         >
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.6rem' }}>
             Demo Accounts (Click to autofill):
           </div>
-          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
             <button
               type="button"
               className="btn btn-sm btn-secondary"
@@ -179,9 +217,23 @@ export const Login: React.FC = () => {
             <button
               type="button"
               className="btn btn-sm btn-secondary"
+              onClick={() => handleQuickFill('umpire', 'Umpire@123')}
+            >
+              Umpire 1 (Owner 1)
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm btn-secondary"
+              onClick={() => handleQuickFill('umpire2', 'Umpire2@123')}
+            >
+              Umpire 2 (Owner 2)
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm btn-secondary"
               onClick={() => handleQuickFill('user', 'User@123')}
             >
-              Scorer (Matches/Series)
+              Scorer (Viewer)
             </button>
           </div>
         </div>

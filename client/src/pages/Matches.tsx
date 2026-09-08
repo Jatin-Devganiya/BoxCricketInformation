@@ -52,7 +52,7 @@ export const Matches: React.FC<MatchesProps> = ({
   initialScorecardMatchId,
   onClearInitialMatchId,
 }) => {
-  const { canManageMatches, canScoreLive } = useAuth();
+  const { canManageMatches, canScoreLive, user, isAdmin } = useAuth();
   const [matches, setMatches] = useState<Match[]>([]);
   const [seriesList, setSeriesList] = useState<Series[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -340,6 +340,10 @@ export const Matches: React.FC<MatchesProps> = ({
     }
 
     const targetSeries = seriesList.find((s) => s.id === Number(matchFormData.seriesId));
+    if (!editingMatch && targetSeries && !isAdmin && targetSeries.createdByUserId && targetSeries.createdByUserId !== user?.id) {
+      setMatchFormError(`You can only schedule matches under series that you created.`);
+      return;
+    }
     if (!editingMatch && !canAddMatchesToSeries(targetSeries?.status)) {
       setMatchFormError(`Series "${targetSeries?.name}" is ${targetSeries?.status}. Cannot add matches to this series.`);
       return;
@@ -363,6 +367,10 @@ export const Matches: React.FC<MatchesProps> = ({
   };
 
   const handleStartMatch = async (m: Match) => {
+    if (!isAdmin && m.createdByUserId && m.createdByUserId !== user?.id) {
+      alert('Only the match creator or an administrator can start this match.');
+      return;
+    }
     const parentSeries = seriesList.find((s) => s.id === m.seriesId);
     if (!parentSeries || parentSeries.status !== 'InProgress') {
       alert('Series has not started yet. Match cannot be started.');
@@ -1311,12 +1319,29 @@ export const Matches: React.FC<MatchesProps> = ({
             No matches found for the selected criteria.
           </div>
         ) : (
-          sortedMatches.map((m) => (
+          sortedMatches.map((m) => {
+            const isMatchOwner = isAdmin || Boolean(user?.id && m.createdByUserId === user.id);
+            return (
             <div key={m.id} className="card match-card card-hover">
               <div className="match-card-header">
-                <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent-cricket)' }}>
-                  {m.seriesName} • Match #{m.matchOrder}
-                </span>
+                <div>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent-cricket)' }}>
+                    {m.seriesName} • Match #{m.matchOrder}
+                  </div>
+                  {m.createdByUsername && (
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                      <span style={{
+                        padding: '1px 5px',
+                        borderRadius: '4px',
+                        background: isMatchOwner ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.06)',
+                        color: isMatchOwner ? '#10b981' : 'var(--text-secondary)',
+                        fontWeight: 500
+                      }}>
+                        By: {m.createdByUsername}{isMatchOwner && !isAdmin ? ' (You)' : ''}
+                      </span>
+                    </div>
+                  )}
+                </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
                   <span
                     className={`badge ${
@@ -1331,7 +1356,7 @@ export const Matches: React.FC<MatchesProps> = ({
                   >
                     {m.status}
                   </span>
-                  {canManageMatches && m.status?.toLowerCase() === 'scheduled' && (
+                  {canManageMatches && isMatchOwner && m.status?.toLowerCase() === 'scheduled' && (
                     <button
                       className="btn-icon-delete"
                       onClick={(e) => {
@@ -1420,29 +1445,43 @@ export const Matches: React.FC<MatchesProps> = ({
                 {(() => {
                   const parentSeries = seriesList.find((s) => s.id === m.seriesId);
                   const pStatus = parentSeries?.status || 'Scheduled';
-                  const startAllowed = canStartMatch(m.status, pStatus);
+                  const startAllowed = canStartMatch(m.status, pStatus) && isMatchOwner;
                   const liveAllowed = canLiveScore(m.status, pStatus) && canScoreLive;
 
                   if (m.status === 'Scheduled') {
                     return (
                       <>
-                        <button
-                          className="btn btn-sm btn-success"
-                          style={{
-                            flex: 1,
-                            opacity: startAllowed ? 1 : 0.6,
-                            cursor: startAllowed ? 'pointer' : 'not-allowed',
-                          }}
-                          disabled={!startAllowed}
-                          title={
-                            !startAllowed
-                              ? 'Series has not started yet. Match cannot be started.'
-                              : 'Start match and launch live scoring'
-                          }
-                          onClick={() => handleStartMatch(m)}
-                        >
-                          <PlayCircle size={14} /> Start Match
-                        </button>
+                        {isMatchOwner ? (
+                          <button
+                            className="btn btn-sm btn-success"
+                            style={{
+                              flex: 1,
+                              opacity: startAllowed ? 1 : 0.6,
+                              cursor: startAllowed ? 'pointer' : 'not-allowed',
+                            }}
+                            disabled={!startAllowed}
+                            title={
+                              !startAllowed
+                                ? 'Series has not started yet. Match cannot be started.'
+                                : 'Start match and launch live scoring'
+                            }
+                            onClick={() => handleStartMatch(m)}
+                          >
+                            <PlayCircle size={14} /> Start Match
+                          </button>
+                        ) : (
+                          <button
+                            className="btn btn-sm btn-secondary"
+                            style={{ flex: 1, opacity: 0.85 }}
+                            onClick={() => {
+                              setModalTab('scorecard');
+                              handleOpenScorecard(m.id);
+                            }}
+                            title={`Match owned by ${m.createdByUsername || 'another umpire'}. View-only mode.`}
+                          >
+                            <FileText size={14} /> View Match
+                          </button>
+                        )}
                         <button
                           className="btn btn-sm btn-secondary"
                           onClick={() => {
@@ -1473,6 +1512,8 @@ export const Matches: React.FC<MatchesProps> = ({
                               ? 'Series is not in progress. Live scoring is disabled.'
                               : !canScoreLive
                               ? 'Live scoring permission required'
+                              : !isMatchOwner
+                              ? 'View live match progress'
                               : 'Open live scoring console'
                           }
                           onClick={() => {
@@ -1480,7 +1521,7 @@ export const Matches: React.FC<MatchesProps> = ({
                             handleOpenScorecard(m.id);
                           }}
                         >
-                          <Activity size={14} /> Live Scoring
+                          <Activity size={14} /> {isMatchOwner ? 'Live Scoring' : 'Live View'}
                         </button>
                         <button
                           className="btn btn-sm btn-secondary"
@@ -1511,7 +1552,7 @@ export const Matches: React.FC<MatchesProps> = ({
                   );
                 })()}
 
-                {canManageMatches && (
+                {canManageMatches && isMatchOwner && (
                   <button
                     className="btn btn-sm btn-secondary"
                     onClick={() => handleOpenEditMatch(m)}
@@ -1522,7 +1563,8 @@ export const Matches: React.FC<MatchesProps> = ({
                 )}
               </div>
             </div>
-          ))
+            );
+          })
         )}
       </div>
 
@@ -1569,16 +1611,20 @@ export const Matches: React.FC<MatchesProps> = ({
               }}
             >
               <option value={0}>-- Select Series --</option>
-              {seriesList.map((s) => (
-                <option
-                  key={s.id}
-                  value={s.id}
-                  disabled={!canAddMatchesToSeries(s.status) && editingMatch?.seriesId !== s.id}
-                  style={!canAddMatchesToSeries(s.status) ? { color: '#9ca3af', fontStyle: 'italic' } : {}}
-                >
-                  {s.name} {!canAddMatchesToSeries(s.status) ? `(${s.status} - Locked)` : `(${s.status})`}
-                </option>
-              ))}
+              {seriesList.map((s) => {
+                const isSeriesOwner = isAdmin || Boolean(user?.id && s.createdByUserId === user.id);
+                const canAdd = canAddMatchesToSeries(s.status) && isSeriesOwner;
+                return (
+                  <option
+                    key={s.id}
+                    value={s.id}
+                    disabled={!canAdd && editingMatch?.seriesId !== s.id}
+                    style={!canAdd ? { color: '#9ca3af', fontStyle: 'italic' } : {}}
+                  >
+                    {s.name} {!isSeriesOwner ? `(Owned by ${s.createdByUsername || 'another user'} - Restricted)` : !canAddMatchesToSeries(s.status) ? `(${s.status} - Locked)` : `(${s.status})`}
+                  </option>
+                );
+              })}
             </select>
             {matchFormData.seriesId > 0 && !canAddMatchesToSeries(seriesList.find((s) => s.id === matchFormData.seriesId)?.status) && (
               <small style={{ color: '#ef4444', marginTop: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
@@ -1755,12 +1801,36 @@ export const Matches: React.FC<MatchesProps> = ({
           <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
             Live scoring data not available for this match.
           </div>
-        ) : (
+        ) : (() => {
+          const isScoringAllowed = isAdmin || Boolean(user?.id && (!activeLiveScore.match.createdByUserId || activeLiveScore.match.createdByUserId === user.id));
+          return (
           <div className="live-score-modal-body">
             {scorecardError && (
               <div className="alert alert-danger" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <AlertCircle size={16} />
                 <span>{scorecardError}</span>
+              </div>
+            )}
+
+            {!isScoringAllowed && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.75rem',
+                  padding: '0.85rem 1.15rem',
+                  borderRadius: '8px',
+                  background: 'rgba(245, 158, 11, 0.12)',
+                  border: '1px solid rgba(245, 158, 11, 0.35)',
+                  color: '#fbbf24',
+                  marginBottom: '1rem',
+                  fontSize: '0.85rem',
+                }}
+              >
+                <Lock size={18} style={{ flexShrink: 0 }} />
+                <div>
+                  <strong>View-Only Mode:</strong> This match was created by <strong>{activeLiveScore.match.createdByUsername || 'another umpire'}</strong>. Live scoring modifications, bowler changes, and outcome finalization are restricted to the match owner and administrators.
+                </div>
               </div>
             )}
 
@@ -1886,7 +1956,7 @@ export const Matches: React.FC<MatchesProps> = ({
                   </div>
                 ) : !isCurrentInningsStarted && !isCurrentInningsCompleted ? (
                   /* State B: Innings Not Started -> Setup Wizard */
-                  !canScoreLive ? (
+                  !canScoreLive || !isScoringAllowed ? (
                     <div
                       style={{
                         background: 'rgba(255,255,255,0.02)',
@@ -1901,7 +1971,9 @@ export const Matches: React.FC<MatchesProps> = ({
                         {activeInningsTab === 1 ? '1st' : '2nd'} Innings Not Started
                       </h3>
                       <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', maxWidth: '420px', margin: '0 auto' }}>
-                        The match umpire or administrator has not started this innings yet. Live score updates will appear here once live scoring commences.
+                        {!isScoringAllowed
+                          ? `This match was created by ${activeLiveScore.match.createdByUsername || 'another umpire'}. Only the match owner or administrator can configure and start this innings.`
+                          : 'The match umpire or administrator has not started this innings yet. Live score updates will appear here once live scoring commences.'}
                       </p>
                     </div>
                   ) : (
@@ -2341,7 +2413,7 @@ export const Matches: React.FC<MatchesProps> = ({
                       </div>
 
                       {/* Manual Strike Swap Button */}
-                      {canScoreLive && (
+                      {canScoreLive && isScoringAllowed && (
                         <button
                           className="strike-swap-btn"
                           title="Swap Striker & Non-Striker strike end"
@@ -2398,7 +2470,7 @@ export const Matches: React.FC<MatchesProps> = ({
                             </span>
                           )}
                         </div>
-                        {canScoreLive && currentInnings?.canChangeBowlerPreOver && (
+                        {canScoreLive && isScoringAllowed && currentInnings?.canChangeBowlerPreOver && (
                           <button
                             className="btn btn-sm btn-secondary"
                             style={{ marginTop: '0.6rem', width: '100%', fontSize: '0.75rem', padding: '0.3rem 0.5rem' }}
@@ -2423,7 +2495,7 @@ export const Matches: React.FC<MatchesProps> = ({
                             6 legal deliveries completed in this over by <strong>{currentInnings?.previousBowlerName || currentInnings?.currentBowler?.playerName}</strong>. Striker and non-striker ends swapped.
                           </div>
                         </div>
-                        {canScoreLive ? (
+                        {canScoreLive && isScoringAllowed ? (
                           <button
                             className="btn btn-primary"
                             onClick={() => {
@@ -2453,7 +2525,7 @@ export const Matches: React.FC<MatchesProps> = ({
                           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                             Bowler: <strong style={{ color: 'var(--text-primary)' }}>{currentInnings?.currentBowler?.playerName || 'Unassigned'}</strong> • Balls in Over: {currentInnings?.currentOverDeliveries?.length || 0}
                           </span>
-                          {canScoreLive && currentInnings?.canReplaceBowlerMidOver && (
+                          {canScoreLive && isScoringAllowed && currentInnings?.canReplaceBowlerMidOver && (
                             <button
                               className="btn btn-sm btn-secondary"
                               style={{
@@ -2576,7 +2648,7 @@ export const Matches: React.FC<MatchesProps> = ({
                       </div>
                     )}
 
-                    {canScoreLive && canLiveScore(activeLiveScore.match.status, seriesList.find((s) => s.id === activeLiveScore.match.seriesId)?.status) ? (
+                    {canScoreLive && isScoringAllowed && canLiveScore(activeLiveScore.match.status, seriesList.find((s) => s.id === activeLiveScore.match.seriesId)?.status) ? (
                       currentInnings?.status === 'Completed' || activeLiveScore?.isMatchComplete || currentInnings?.chasingStatus?.isTargetChased ? (
                         <div
                           style={{
@@ -3149,7 +3221,7 @@ export const Matches: React.FC<MatchesProps> = ({
                   </div>
                 </div>
 
-                {canScoreLive && !isMatchStatusLocked(activeLiveScore.match.status, seriesList.find((s) => s.id === activeLiveScore.match.seriesId)?.status) ? (
+                {canScoreLive && isScoringAllowed && !isMatchStatusLocked(activeLiveScore.match.status, seriesList.find((s) => s.id === activeLiveScore.match.seriesId)?.status) ? (
                   <button
                     className="btn btn-primary"
                     onClick={handleSaveOutcome}
@@ -3161,13 +3233,16 @@ export const Matches: React.FC<MatchesProps> = ({
                   <div style={{ textAlign: 'center', padding: '0.85rem', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
                     {isMatchStatusLocked(activeLiveScore.match.status, seriesList.find((s) => s.id === activeLiveScore.match.seriesId)?.status)
                       ? 'Match outcome has been finalized. Scorecard is locked.'
+                      : !isScoringAllowed
+                      ? `Match outcome can only be finalized by the match owner (${activeLiveScore.match.createdByUsername || 'creator'}) or an administrator.`
                       : 'Match outcome can only be finalized with live scoring permission.'}
                   </div>
                 )}
               </div>
             )}
           </div>
-        )}
+          );
+        })()}
       </Modal>
 
       {/* Wicket Dialog Modal */}

@@ -126,6 +126,69 @@ IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_Series_Name_Active' AN
 BEGIN
     CREATE UNIQUE NONCLUSTERED INDEX IX_Series_Name_Active ON Series(Name) WHERE [Status] <> 'Cancelled';
 END
+
+-- Ownership columns on Series, Matches, Players, Teams
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Series') AND name = 'CreatedByUserId')
+BEGIN
+    ALTER TABLE Series ADD CreatedByUserId INT NULL;
+    ALTER TABLE Series ADD CONSTRAINT FK_Series_Users_CreatedByUserId FOREIGN KEY (CreatedByUserId) REFERENCES Users(Id);
+END
+
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Matches') AND name = 'CreatedByUserId')
+BEGIN
+    ALTER TABLE Matches ADD CreatedByUserId INT NULL;
+    ALTER TABLE Matches ADD CONSTRAINT FK_Matches_Users_CreatedByUserId FOREIGN KEY (CreatedByUserId) REFERENCES Users(Id);
+END
+
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Players') AND name = 'CreatedByUserId')
+BEGIN
+    ALTER TABLE Players ADD CreatedByUserId INT NULL;
+    ALTER TABLE Players ADD CONSTRAINT FK_Players_Users_CreatedByUserId FOREIGN KEY (CreatedByUserId) REFERENCES Users(Id);
+END
+
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Teams') AND name = 'CreatedByUserId')
+BEGIN
+    ALTER TABLE Teams ADD CreatedByUserId INT NULL;
+    ALTER TABLE Teams ADD CONSTRAINT FK_Teams_Users_CreatedByUserId FOREIGN KEY (CreatedByUserId) REFERENCES Users(Id);
+END
+
+-- UserLoginHistories table for active session tracking and login audit
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'UserLoginHistories')
+BEGIN
+    CREATE TABLE UserLoginHistories (
+        Id INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        UserId INT NOT NULL,
+        Username NVARCHAR(100) NOT NULL,
+        SessionId NVARCHAR(100) NOT NULL,
+        LoginTime DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+        LogoutTime DATETIME2 NULL,
+        Status NVARCHAR(50) NOT NULL DEFAULT 'Active',
+        IPAddress NVARCHAR(100) NULL,
+        HostName NVARCHAR(250) NULL,
+        LogoutReason NVARCHAR(100) NULL,
+        LogoutByUserId INT NULL,
+        CreatedAt DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+        UpdatedAt DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+        CONSTRAINT FK_UserLoginHistories_Users_UserId FOREIGN KEY (UserId) REFERENCES Users(Id),
+        CONSTRAINT FK_UserLoginHistories_Users_LogoutByUserId FOREIGN KEY (LogoutByUserId) REFERENCES Users(Id)
+    );
+    CREATE INDEX IX_UserLoginHistories_SessionId ON UserLoginHistories(SessionId);
+    CREATE INDEX IX_UserLoginHistories_UserId_Status ON UserLoginHistories(UserId, Status);
+    CREATE INDEX IX_UserLoginHistories_LoginTime ON UserLoginHistories(LoginTime);
+END
+
+-- Backfill legacy records without owner to admin user
+IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Series') AND name = 'CreatedByUserId')
+    EXEC('UPDATE Series SET CreatedByUserId = (SELECT TOP 1 Id FROM Users WHERE Username = ''admin'') WHERE CreatedByUserId IS NULL');
+
+IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Matches') AND name = 'CreatedByUserId')
+    EXEC('UPDATE Matches SET CreatedByUserId = (SELECT TOP 1 Id FROM Users WHERE Username = ''admin'') WHERE CreatedByUserId IS NULL');
+
+IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Players') AND name = 'CreatedByUserId')
+    EXEC('UPDATE Players SET CreatedByUserId = (SELECT TOP 1 Id FROM Users WHERE Username = ''admin'') WHERE CreatedByUserId IS NULL');
+
+IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('Teams') AND name = 'CreatedByUserId')
+    EXEC('UPDATE Teams SET CreatedByUserId = (SELECT TOP 1 Id FROM Users WHERE Username = ''admin'') WHERE CreatedByUserId IS NULL');
 ";
         try
         {
@@ -242,6 +305,25 @@ END
                 Permission = "LiveScoring",
                 IsAllowed = false
             });
+            await context.SaveChangesAsync();
+        }
+
+        if (!await context.Users.AnyAsync(u => u.Username.ToLower() == "umpire2"))
+        {
+            var umpire2User = new User
+            {
+                Username = "umpire2",
+                FirstName = "Second",
+                LastName = "Umpire",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("Umpire2@123"),
+                Status = "Active",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            await context.Users.AddAsync(umpire2User);
+            await context.SaveChangesAsync();
+
+            await context.UserRoles.AddAsync(new UserRole { UserId = umpire2User.Id, RoleId = umpireRoleObj.Id });
             await context.SaveChangesAsync();
         }
 

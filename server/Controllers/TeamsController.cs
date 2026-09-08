@@ -19,11 +19,18 @@ public class TeamsController : ControllerBase
         _context = context;
     }
 
+    private int? GetCurrentUserId()
+    {
+        var claim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        return int.TryParse(claim, out var id) ? id : null;
+    }
+
     [HttpGet]
     public async Task<IActionResult> GetTeams()
     {
         var teams = await _context.Teams
             .Include(t => t.TeamPlayers.Where(tp => tp.Status == "Active"))
+            .Include(t => t.CreatedByUser)
             .OrderBy(t => t.Name)
             .Select(t => new TeamDto
             {
@@ -31,7 +38,9 @@ public class TeamsController : ControllerBase
                 Name = t.Name,
                 ShortName = t.ShortName,
                 Status = t.Status,
-                PlayerCount = t.TeamPlayers.Count
+                PlayerCount = t.TeamPlayers.Count,
+                CreatedByUserId = t.CreatedByUserId,
+                CreatedByUsername = t.CreatedByUser != null ? t.CreatedByUser.Username : null
             })
             .ToListAsync();
 
@@ -42,6 +51,7 @@ public class TeamsController : ControllerBase
     public async Task<IActionResult> GetTeamById(int id)
     {
         var team = await _context.Teams
+            .Include(t => t.CreatedByUser)
             .Include(t => t.TeamPlayers.Where(tp => tp.Status == "Active"))
                 .ThenInclude(tp => tp.Player)
             .FirstOrDefaultAsync(t => t.Id == id);
@@ -54,6 +64,8 @@ public class TeamsController : ControllerBase
             Name = team.Name,
             ShortName = team.ShortName,
             Status = team.Status,
+            CreatedByUserId = team.CreatedByUserId,
+            CreatedByUsername = team.CreatedByUser?.Username,
             Players = team.TeamPlayers.Select(tp => new PlayerDto
             {
                 Id = tp.Player.Id,
@@ -96,6 +108,7 @@ public class TeamsController : ControllerBase
             Name = trimmedName,
             ShortName = req.ShortName.Trim().ToUpper(),
             Status = teamStatus,
+            CreatedByUserId = GetCurrentUserId(),
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -116,7 +129,9 @@ public class TeamsController : ControllerBase
             Name = team.Name,
             ShortName = team.ShortName,
             Status = team.Status,
-            PlayerCount = 0
+            PlayerCount = 0,
+            CreatedByUserId = team.CreatedByUserId,
+            CreatedByUsername = User.Identity?.Name
         });
     }
 
@@ -168,7 +183,8 @@ public class TeamsController : ControllerBase
             Name = team.Name,
             ShortName = team.ShortName,
             Status = team.Status,
-            PlayerCount = await _context.TeamPlayers.CountAsync(tp => tp.TeamId == id && tp.Status == "Active")
+            PlayerCount = await _context.TeamPlayers.CountAsync(tp => tp.TeamId == id && tp.Status == "Active"),
+            CreatedByUserId = team.CreatedByUserId
         });
     }
 

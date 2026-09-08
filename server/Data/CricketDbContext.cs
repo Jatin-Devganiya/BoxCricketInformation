@@ -22,6 +22,7 @@ public class CricketDbContext : DbContext
     public DbSet<MatchBattingPerformance> MatchBattingPerformances => Set<MatchBattingPerformance>();
     public DbSet<MatchBowlingPerformance> MatchBowlingPerformances => Set<MatchBowlingPerformance>();
     public DbSet<BallEvent> BallEvents => Set<BallEvent>();
+    public DbSet<UserLoginHistory> UserLoginHistories => Set<UserLoginHistory>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -90,6 +91,11 @@ public class CricketDbContext : DbContext
                   .HasForeignKey<Player>(p => p.UserId)
                   .OnDelete(DeleteBehavior.SetNull);
 
+            entity.HasOne(p => p.CreatedByUser)
+                  .WithMany()
+                  .HasForeignKey(p => p.CreatedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
             entity.HasIndex(p => p.LastName);
             entity.HasIndex(p => new { p.FirstName, p.LastName })
                   .HasDatabaseName("IX_Players_FirstName_LastName_Active")
@@ -104,6 +110,10 @@ public class CricketDbContext : DbContext
             entity.Property(t => t.Name).HasMaxLength(100).IsRequired();
             entity.Property(t => t.ShortName).HasMaxLength(10).IsRequired();
             entity.Property(t => t.Status).HasMaxLength(20).HasDefaultValue("Active");
+            entity.HasOne(t => t.CreatedByUser)
+                  .WithMany()
+                  .HasForeignKey(t => t.CreatedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(t => t.Name)
                   .HasDatabaseName("IX_Teams_Name_Active")
                   .HasFilter("[Status] = 'Active'")
@@ -134,6 +144,10 @@ public class CricketDbContext : DbContext
             entity.HasKey(s => s.Id);
             entity.Property(s => s.Name).HasMaxLength(150).IsRequired();
             entity.Property(s => s.Status).HasMaxLength(20).HasDefaultValue("Scheduled");
+            entity.HasOne(s => s.CreatedByUser)
+                  .WithMany()
+                  .HasForeignKey(s => s.CreatedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(s => s.StartDate);
             entity.HasIndex(s => s.Name)
                   .HasDatabaseName("IX_Series_Name_Active")
@@ -174,6 +188,11 @@ public class CricketDbContext : DbContext
             entity.Property(m => m.Status).HasMaxLength(20).HasDefaultValue("Scheduled");
             entity.Property(m => m.Address).HasMaxLength(250);
             entity.Property(m => m.ScheduledTime).HasMaxLength(20);
+
+            entity.HasOne(m => m.CreatedByUser)
+                  .WithMany()
+                  .HasForeignKey(m => m.CreatedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(m => m.SeriesId);
             entity.HasIndex(m => m.ScheduledDate);
@@ -291,6 +310,32 @@ public class CricketDbContext : DbContext
             entity.HasIndex(b => new { b.MatchId, b.InningsId });
             entity.HasIndex(b => b.FielderPlayerId);
             entity.HasIndex(b => b.CreatedAt);
+        });
+
+        // UserLoginHistory
+        modelBuilder.Entity<UserLoginHistory>(entity =>
+        {
+            entity.HasKey(h => h.Id);
+            entity.Property(h => h.Username).HasMaxLength(100).IsRequired();
+            entity.Property(h => h.SessionId).HasMaxLength(100).IsRequired();
+            entity.Property(h => h.Status).HasMaxLength(50).HasDefaultValue("Active");
+            entity.Property(h => h.IPAddress).HasMaxLength(100);
+            entity.Property(h => h.HostName).HasMaxLength(250);
+            entity.Property(h => h.LogoutReason).HasMaxLength(100);
+
+            entity.HasOne(h => h.User)
+                  .WithMany()
+                  .HasForeignKey(h => h.UserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(h => h.LogoutByUser)
+                  .WithMany()
+                  .HasForeignKey(h => h.LogoutByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(h => h.SessionId);
+            entity.HasIndex(h => new { h.UserId, h.Status });
+            entity.HasIndex(h => h.LoginTime);
         });
     }
 }

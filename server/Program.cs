@@ -17,6 +17,7 @@ builder.Services.AddDbContext<CricketDbContext>(options =>
     options.UseSqlServer(connectionString));
 
 // 2. Add Custom Services
+builder.Services.AddScoped<ISessionService, SessionService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddScoped<IPlayerStatsService, PlayerStatsService>();
@@ -132,6 +133,7 @@ if (app.Environment.IsDevelopment())
 app.UseCors("AllowReactApp");
 
 app.UseAuthentication();
+app.UseMiddleware<SessionValidationMiddleware>();
 app.UseAuthorization();
 
 app.MapControllers();

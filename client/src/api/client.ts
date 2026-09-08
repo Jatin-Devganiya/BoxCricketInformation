@@ -15,7 +15,11 @@ import {
   StartInningsPayload,
   RecordBallPayload,
   RecordWicketPayload,
-  EligibleBowlersResponse
+  EligibleBowlersResponse,
+  ActiveSession,
+  LoginHistory,
+  LoginHistoryFilter,
+  PagedResult
 } from '../types';
 
 const api = axios.create({
@@ -42,6 +46,18 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
+      const isTerminated =
+        error.response.headers?.['x-session-terminated'] === 'true' ||
+        error.response.data?.sessionTerminated === true ||
+        (typeof error.response.data?.message === 'string' &&
+          error.response.data.message.includes('terminated'));
+
+      if (isTerminated) {
+        const msg = error.response.data?.message || 'Your session has been terminated by an administrator.';
+        sessionStorage.setItem('session_terminated_notice', msg);
+        window.dispatchEvent(new CustomEvent('session-terminated', { detail: msg }));
+      }
+
       // Clear token on 401
       localStorage.removeItem('token');
       localStorage.removeItem('user');
@@ -55,8 +71,29 @@ export const authApi = {
     const { data } = await api.post<AuthResponse>('/auth/login', credentials);
     return data;
   },
+  logout: async (): Promise<void> => {
+    try {
+      await api.post('/auth/logout');
+    } catch {
+      // Ignored if network or already ended
+    }
+  },
   getMe: async (): Promise<User> => {
     const { data } = await api.get<User>('/auth/me');
+    return data;
+  },
+  getActiveSessions: async (): Promise<ActiveSession[]> => {
+    const { data } = await api.get<ActiveSession[]>('/auth/active-sessions');
+    return data;
+  },
+  forceLogout: async (sessionId: string): Promise<void> => {
+    await api.post(`/auth/force-logout/${sessionId}`);
+  },
+  forceLogoutUser: async (userId: number): Promise<void> => {
+    await api.post(`/auth/force-logout-user/${userId}`);
+  },
+  getLoginHistory: async (params?: LoginHistoryFilter): Promise<PagedResult<LoginHistory>> => {
+    const { data } = await api.get<PagedResult<LoginHistory>>('/auth/login-history', { params });
     return data;
   },
 };

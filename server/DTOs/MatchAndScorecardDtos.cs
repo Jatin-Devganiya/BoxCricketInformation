@@ -10,6 +10,8 @@ public class SeriesDto
     public string? Description { get; set; }
     public int TotalMatches { get; set; }
     public int CompletedMatches { get; set; }
+    public int? CreatedByUserId { get; set; }
+    public string? CreatedByUsername { get; set; }
 }
 
 public class SeriesDetailDto
@@ -20,6 +22,8 @@ public class SeriesDetailDto
     public DateTime EndDate { get; set; }
     public string Status { get; set; } = string.Empty;
     public string? Description { get; set; }
+    public int? CreatedByUserId { get; set; }
+    public string? CreatedByUsername { get; set; }
     public List<MatchDto> Matches { get; set; } = new();
 }
 
@@ -66,6 +70,8 @@ public class MatchDto
     public int? MOMPlayerId { get; set; }
     public string? MOMPlayerName { get; set; }
     public double? MOMScore { get; set; }
+    public int? CreatedByUserId { get; set; }
+    public string? CreatedByUsername { get; set; }
 }
 
 public class CreateMatchRequest

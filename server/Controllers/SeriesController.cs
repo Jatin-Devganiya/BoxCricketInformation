@@ -1,12 +1,12 @@
+using System.Security.Claims;
 using CricketApp.Api.Attributes;
 using CricketApp.Api.Data;
 using CricketApp.Api.DTOs;
 using CricketApp.Api.Models;
+using CricketApp.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-
-using CricketApp.Api.Services;
 
 namespace CricketApp.Api.Controllers;
 
@@ -23,11 +23,23 @@ public class SeriesController : ControllerBase
         _statusValidationService = statusValidationService;
     }
 
+    private int? GetCurrentUserId()
+    {
+        var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        return int.TryParse(claim, out var id) ? id : null;
+    }
+
+    private bool IsAdmin()
+    {
+        return User.IsInRole("Admin");
+    }
+
     [HttpGet]
     public async Task<IActionResult> GetSeriesList([FromQuery] string? status)
     {
         var query = _context.Series
             .Include(s => s.Matches)
+            .Include(s => s.CreatedByUser)
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(status))
@@ -46,7 +58,9 @@ public class SeriesController : ControllerBase
                 Status = s.Status,
                 Description = s.Description,
                 TotalMatches = s.Matches.Count(m => m.Status != "Cancelled"),
-                CompletedMatches = s.Matches.Count(m => m.Status == "Completed")
+                CompletedMatches = s.Matches.Count(m => m.Status == "Completed"),
+                CreatedByUserId = s.CreatedByUserId,
+                CreatedByUsername = s.CreatedByUser != null ? s.CreatedByUser.Username : null
             })
             .ToListAsync();
 
@@ -57,6 +71,7 @@ public class SeriesController : ControllerBase
     public async Task<IActionResult> GetSeriesById(int id)
     {
         var series = await _context.Series
+            .Include(s => s.CreatedByUser)
             .Include(s => s.Matches)
                 .ThenInclude(m => m.Team1)
             .Include(s => s.Matches)
@@ -65,6 +80,8 @@ public class SeriesController : ControllerBase
                 .ThenInclude(m => m.WinningTeam)
             .Include(s => s.Matches)
                 .ThenInclude(m => m.MOMPlayer)
+            .Include(s => s.Matches)
+                .ThenInclude(m => m.CreatedByUser)
             .FirstOrDefaultAsync(s => s.Id == id);
 
         if (series == null) return NotFound(new { message = "Series not found." });
@@ -77,6 +94,8 @@ public class SeriesController : ControllerBase
             EndDate = series.EndDate,
             Status = series.Status,
             Description = series.Description,
+            CreatedByUserId = series.CreatedByUserId,
+            CreatedByUsername = series.CreatedByUser?.Username,
             Matches = series.Matches
                 .OrderBy(m => m.MatchOrder)
                 .ThenBy(m => m.ScheduledDate)
@@ -101,7 +120,9 @@ public class SeriesController : ControllerBase
                     WinningTeamName = m.WinningTeam?.Name,
                     Result = m.Result,
                     MOMPlayerId = m.MOMPlayerId,
-                    MOMPlayerName = m.MOMPlayer != null ? $"{m.MOMPlayer.FirstName} {m.MOMPlayer.LastName}" : null
+                    MOMPlayerName = m.MOMPlayer != null ? $"{m.MOMPlayer.FirstName} {m.MOMPlayer.LastName}" : null,
+                    CreatedByUserId = m.CreatedByUserId,
+                    CreatedByUsername = m.CreatedByUser?.Username
                 }).ToList()
         });
     }
@@ -136,6 +157,8 @@ public class SeriesController : ControllerBase
             return BadRequest(new { success = false, message = statusValidation.ErrorMessage });
         }
 
+        var currentUserId = GetCurrentUserId();
+
         var series = new Series
         {
             Name = trimmedName,
@@ -143,6 +166,7 @@ public class SeriesController : ControllerBase
             EndDate = req.EndDate.Date,
             Status = targetStatus,
             Description = req.Description,
+            CreatedByUserId = currentUserId,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -166,7 +190,9 @@ public class SeriesController : ControllerBase
             Status = series.Status,
             Description = series.Description,
             TotalMatches = 0,
-            CompletedMatches = 0
+            CompletedMatches = 0,
+            CreatedByUserId = series.CreatedByUserId,
+            CreatedByUsername = User.Identity?.Name
         });
     }
 
@@ -181,6 +207,16 @@ public class SeriesController : ControllerBase
 
         var series = await _context.Series.FindAsync(id);
         if (series == null) return NotFound(new { success = false, message = "Series not found." });
+
+        // Ownership validation: Umpire can only modify their own series
+        if (!IsAdmin())
+        {
+            var currentUserId = GetCurrentUserId();
+            if (series.CreatedByUserId.HasValue && series.CreatedByUserId.Value != currentUserId)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "Access denied. You can only modify series that you created." });
+            }
+        }
 
         var trimmedName = req.Name.Trim();
         var targetStatus = string.IsNullOrWhiteSpace(req.Status) ? series.Status : req.Status.Trim();
@@ -230,7 +266,8 @@ public class SeriesController : ControllerBase
             Status = series.Status,
             Description = series.Description,
             TotalMatches = await _context.Matches.CountAsync(m => m.SeriesId == id),
-            CompletedMatches = await _context.Matches.CountAsync(m => m.SeriesId == id && m.Status == "Completed")
+            CompletedMatches = await _context.Matches.CountAsync(m => m.SeriesId == id && m.Status == "Completed"),
+            CreatedByUserId = series.CreatedByUserId
         });
     }
 
@@ -240,6 +277,16 @@ public class SeriesController : ControllerBase
     {
         var series = await _context.Series.FindAsync(id);
         if (series == null) return NotFound(new { message = "Series not found." });
+
+        // Ownership validation: Umpire can only delete their own series
+        if (!IsAdmin())
+        {
+            var currentUserId = GetCurrentUserId();
+            if (series.CreatedByUserId.HasValue && series.CreatedByUserId.Value != currentUserId)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "Access denied. You can only delete series that you created." });
+            }
+        }
 
         var seriesMatches = await _context.Matches.Where(m => m.SeriesId == id).ToListAsync();
         var cancellationValidation = _statusValidationService.ValidateSeriesCancellation(series.Status, seriesMatches);
