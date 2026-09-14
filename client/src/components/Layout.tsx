@@ -13,8 +13,12 @@ import {
   X,
   Activity,
   Sun,
-  Moon
+  Moon,
+  Database,
 } from 'lucide-react';
+import { BackupModal } from './BackupModal';
+import { isLocalStorageMode } from '../api/client';
+
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -36,6 +40,7 @@ export const Layout: React.FC<LayoutProps> = ({
   const { user, canManageUsers, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [backupModalOpen, setBackupModalOpen] = useState(false);
 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -138,6 +143,27 @@ export const Layout: React.FC<LayoutProps> = ({
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             {actions && <div className="header-actions">{actions}</div>}
+
+            <button
+              type="button"
+              id="storage-backup-button"
+              className="btn btn-secondary"
+              onClick={() => setBackupModalOpen(true)}
+              title="Storage Management & Database Export/Import"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                borderColor: isLocalStorageMode ? 'rgba(16, 185, 129, 0.4)' : undefined,
+                color: isLocalStorageMode ? '#10b981' : undefined,
+              }}
+            >
+              <Database size={16} />
+              <span>{isLocalStorageMode ? 'LocalStorage DB' : 'API Mode'}</span>
+            </button>
+
             <button
               type="button"
               id="theme-toggle-button"
@@ -162,7 +188,13 @@ export const Layout: React.FC<LayoutProps> = ({
         </header>
 
         <main className="content-body">{children}</main>
+
+        <BackupModal
+          isOpen={backupModalOpen}
+          onClose={() => setBackupModalOpen(false)}
+        />
       </div>
     </div>
   );
 };
+

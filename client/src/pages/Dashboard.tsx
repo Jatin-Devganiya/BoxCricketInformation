@@ -161,7 +161,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, onViewMatchSco
     setFilterLogoutToDate('');
     setHistoryPage(1);
     setTimeout(() => {
-      authApi.getLoginHistory({ page: 1, pageSize: historyPageSize }).then((res) => {
+      authApi.getLoginHistory({ page: 1, pageSize: historyPageSize }).then((res: any) => {
         setHistoryItems(res.items);
         setHistoryTotal(res.totalCount);
         setHistoryPage(res.page);

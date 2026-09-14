@@ -671,7 +671,7 @@ export const Matches: React.FC<MatchesProps> = ({
       fetchMatches();
 
       const activeInn = updated.activeInningsNumber === 1 ? updated.innings1 : updated.innings2;
-      const updatedStriker = activeInn?.battingPerformances?.find((b) => b.playerId === previousStriker?.playerId);
+      const updatedStriker = activeInn?.battingPerformances?.find((b: any) => b.playerId === previousStriker?.playerId);
       const currentStrikerRuns = updatedStriker
         ? updatedStriker.runs
         : activeInn?.striker?.playerId === previousStriker?.playerId && activeInn?.striker?.runs !== undefined
@@ -727,7 +727,7 @@ export const Matches: React.FC<MatchesProps> = ({
       fetchMatches();
 
       const activeInn = updated.activeInningsNumber === 1 ? updated.innings1 : updated.innings2;
-      const updatedStriker = activeInn?.battingPerformances?.find((b) => b.playerId === previousStriker?.playerId);
+      const updatedStriker = activeInn?.battingPerformances?.find((b: any) => b.playerId === previousStriker?.playerId);
       const currentStrikerRuns = updatedStriker
         ? updatedStriker.runs
         : activeInn?.striker?.playerId === previousStriker?.playerId && activeInn?.striker?.runs !== undefined

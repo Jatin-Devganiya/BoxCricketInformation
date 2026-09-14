@@ -518,3 +518,21 @@ export interface MomCalculationResult {
   bowlingSummary: string;
   leaderboard: PlayerMomScore[];
 }
+
+export interface ExportMetadata {
+  applicationName: string;
+  exportVersion: string;
+  schemaVersion: string;
+  storageMode: string;
+  exportedAt: string;
+  recordCounts: Record<string, number>;
+}
+
+export interface ImportValidationResult {
+  isValid: boolean;
+  errors: string[];
+  warnings: string[];
+  recordCounts: Record<string, number>;
+  data?: any;
+}
+

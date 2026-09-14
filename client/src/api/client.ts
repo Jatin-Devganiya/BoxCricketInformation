@@ -19,8 +19,21 @@ import {
   ActiveSession,
   LoginHistory,
   LoginHistoryFilter,
-  PagedResult
+  PagedResult,
 } from '../types';
+
+import { localAuthService } from '../storage/services/localAuthService';
+import { localUsersService } from '../storage/services/localUsersService';
+import { localPlayersService } from '../storage/services/localPlayersService';
+import { localTeamsService } from '../storage/services/localTeamsService';
+import { localSeriesService } from '../storage/services/localSeriesService';
+import { localMatchesService } from '../storage/services/localMatchesService';
+import { localDashboardService } from '../storage/services/localDashboardService';
+import { localLiveScoringService } from '../storage/services/localLiveScoringService';
+import { backupService } from '../storage/backupService';
+
+// Determine storage mode from environment variable
+export const isLocalStorageMode = import.meta.env.VITE_USE_LOCAL_STORAGE === 'true';
 
 const api = axios.create({
   baseURL: '/api',
@@ -29,7 +42,7 @@ const api = axios.create({
   },
 });
 
-// Attach JWT token to all outgoing requests
+// Attach JWT token to all outgoing requests in API mode
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
@@ -41,7 +54,7 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor for auth errors
+// Response interceptor for auth errors in API mode
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -66,7 +79,8 @@ api.interceptors.response.use(
   }
 );
 
-export const authApi = {
+// HTTP API Providers
+const httpAuthApi = {
   login: async (credentials: { username: string; password: string }): Promise<AuthResponse> => {
     const { data } = await api.post<AuthResponse>('/auth/login', credentials);
     return data;
@@ -74,9 +88,7 @@ export const authApi = {
   logout: async (): Promise<void> => {
     try {
       await api.post('/auth/logout');
-    } catch {
-      // Ignored if network or already ended
-    }
+    } catch {}
   },
   getMe: async (): Promise<User> => {
     const { data } = await api.get<User>('/auth/me');
@@ -98,7 +110,7 @@ export const authApi = {
   },
 };
 
-export const usersApi = {
+const httpUsersApi = {
   getAll: async (): Promise<User[]> => {
     const { data } = await api.get<User[]>('/users');
     return data;
@@ -120,7 +132,7 @@ export const usersApi = {
   },
 };
 
-export const playersApi = {
+const httpPlayersApi = {
   getAll: async (params?: { search?: string; category?: string; status?: string }): Promise<Player[]> => {
     const { data } = await api.get<Player[]>('/players', { params });
     return data;
@@ -146,7 +158,7 @@ export const playersApi = {
   },
 };
 
-export const teamsApi = {
+const httpTeamsApi = {
   getAll: async (): Promise<Team[]> => {
     const { data } = await api.get<Team[]>('/teams');
     return data;
@@ -174,7 +186,7 @@ export const teamsApi = {
   },
 };
 
-export const seriesApi = {
+const httpSeriesApi = {
   getAll: async (status?: string): Promise<Series[]> => {
     const { data } = await api.get<Series[]>('/series', { params: { status } });
     return data;
@@ -196,7 +208,7 @@ export const seriesApi = {
   },
 };
 
-export const matchesApi = {
+const httpMatchesApi = {
   getAll: async (params?: { seriesId?: number; status?: string; date?: string; sortOrder?: string }): Promise<Match[]> => {
     const { data } = await api.get<Match[]>('/matches', { params });
     return data;
@@ -226,14 +238,14 @@ export const matchesApi = {
   },
 };
 
-export const dashboardApi = {
+const httpDashboardApi = {
   getStats: async (): Promise<DashboardStats> => {
     const { data } = await api.get<DashboardStats>('/dashboard/stats');
     return data;
   },
 };
 
-export const liveScoringApi = {
+const httpLiveScoringApi = {
   getLiveScore: async (matchId: number): Promise<LiveScore> => {
     const { data } = await api.get<LiveScore>(`/matches/${matchId}/live-score`);
     return data;
@@ -279,5 +291,18 @@ export const liveScoringApi = {
     return data;
   },
 };
+
+// Swappable Unified Exports:
+// In LocalStorage mode (VITE_USE_LOCAL_STORAGE=true), use high-performance local services.
+// Otherwise, continue using .NET API.
+export const authApi = isLocalStorageMode ? (localAuthService as any) : httpAuthApi;
+export const usersApi = isLocalStorageMode ? (localUsersService as any) : httpUsersApi;
+export const playersApi = isLocalStorageMode ? (localPlayersService as any) : httpPlayersApi;
+export const teamsApi = isLocalStorageMode ? (localTeamsService as any) : httpTeamsApi;
+export const seriesApi = isLocalStorageMode ? (localSeriesService as any) : httpSeriesApi;
+export const matchesApi = isLocalStorageMode ? (localMatchesService as any) : httpMatchesApi;
+export const dashboardApi = isLocalStorageMode ? (localDashboardService as any) : httpDashboardApi;
+export const liveScoringApi = isLocalStorageMode ? (localLiveScoringService as any) : httpLiveScoringApi;
+export const backupApi = backupService;
 
 export default api;
