@@ -32,8 +32,13 @@ import { localDashboardService } from '../storage/services/localDashboardService
 import { localLiveScoringService } from '../storage/services/localLiveScoringService';
 import { backupService } from '../storage/backupService';
 
-// Determine storage mode from environment variable
-export const isLocalStorageMode = import.meta.env.VITE_USE_LOCAL_STORAGE === 'true';
+// Determine storage mode from environment variable or static hosting environment (GitHub Pages)
+export const isLocalStorageMode =
+  import.meta.env.VITE_USE_LOCAL_STORAGE === 'true' ||
+  (typeof window !== 'undefined' && (
+    window.location.hostname.includes('github.io') ||
+    window.location.protocol === 'file:'
+  ));
 
 const api = axios.create({
   baseURL: '/api',

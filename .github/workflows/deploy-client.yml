@@ -41,6 +41,8 @@ jobs:
       - name: Build client
         working-directory: ./client
         run: npm run build
+        env:
+          VITE_USE_LOCAL_STORAGE: 'true'
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
