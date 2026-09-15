@@ -499,7 +499,7 @@ export const Players: React.FC = () => {
                 </tr>
               ) : (
                 paginatedPlayers.map((p) => {
-                  const isPlayerOwner = isAdmin || Boolean(user?.id && p.createdByUserId === user.id);
+                  const isPlayerOwner = isAdmin || !p.createdByUserId || Boolean(user?.id && String(p.createdByUserId) === String(user.id));
                   return (
                   <tr key={p.id}>
                     {/* Batting Rank Column */}

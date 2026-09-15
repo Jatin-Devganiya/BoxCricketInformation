@@ -246,7 +246,10 @@ export const Series: React.FC<SeriesProps> = ({ onViewScorecard }) => {
       if (editingSeries) {
         await seriesApi.update(editingSeries.id, formData);
       } else {
-        await seriesApi.create(formData);
+        await seriesApi.create({
+          ...formData,
+          createdByUserId: user?.id,
+        });
       }
       setEditModalOpen(false);
       fetchSeries();
@@ -400,7 +403,7 @@ export const Series: React.FC<SeriesProps> = ({ onViewScorecard }) => {
                   const startStr = new Date(s.startDate).toLocaleDateString();
                   const endStr = new Date(s.endDate).toLocaleDateString();
                   const isSingleDay = startStr === endStr;
-                  const isOwner = isAdmin || Boolean(user?.id && s.createdByUserId === user.id);
+                  const isOwner = isAdmin || !s.createdByUserId || Boolean(user?.id && String(s.createdByUserId) === String(user.id));
                   return (
                     <tr key={s.id}>
                       <td style={{ fontWeight: 600 }}>

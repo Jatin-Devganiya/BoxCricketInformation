@@ -1,4 +1,4 @@
-import { STORAGE_KEYS, DbSeries, DbMatch } from '../dbSchema';
+import { STORAGE_KEYS, DbSeries, DbMatch, DbUser } from '../dbSchema';
 import { LocalStorageRepository } from '../LocalStorageRepository';
 import { LocalStorageDataStore } from '../LocalStorageDataStore';
 import { Series, SeriesDetail, Match } from '../../types';
@@ -7,6 +7,18 @@ import { getAllowedSeriesTransitions } from '../../utils/statusRules';
 
 const seriesRepo = new LocalStorageRepository<DbSeries>(STORAGE_KEYS.SERIES);
 const matchRepo = new LocalStorageRepository<DbMatch>(STORAGE_KEYS.MATCHES);
+const userRepo = new LocalStorageRepository<DbUser>(STORAGE_KEYS.USERS);
+
+const getCurrentUserIdFromStorage = (): number | null => {
+  try {
+    const raw = localStorage.getItem('user');
+    if (!raw) return null;
+    const u = JSON.parse(raw);
+    return u?.id ? Number(u.id) : null;
+  } catch {
+    return null;
+  }
+};
 
 export const localSeriesService = {
   getAll: async (status?: string): Promise<Series[]> => {
@@ -17,10 +29,12 @@ export const localSeriesService = {
     }
 
     const matches = matchRepo.getAll();
+    const users = userRepo.getAll();
 
     return list.map((s) => {
       const sMatches = matches.filter((m) => String(m.seriesId) === String(s.id));
       const completed = sMatches.filter((m) => m.status === 'Completed').length;
+      const creator = users.find((u) => String(u.id) === String(s.createdByUserId));
 
       return {
         id: s.id as any,
@@ -32,6 +46,7 @@ export const localSeriesService = {
         totalMatches: sMatches.length,
         completedMatches: completed,
         createdByUserId: s.createdByUserId ? (s.createdByUserId as any) : undefined,
+        createdByUsername: creator ? creator.username : undefined,
       };
     });
   },
@@ -72,6 +87,7 @@ export const localSeriesService = {
       throw new Error(`A non-cancelled series with name '${name}' already exists.`);
     }
 
+    const currentUserId = payload.createdByUserId ?? getCurrentUserIdFromStorage();
     const now = new Date().toISOString();
     const newSeries = seriesRepo.create({
       name,
@@ -79,7 +95,7 @@ export const localSeriesService = {
       endDate: payload.endDate || now.split('T')[0],
       status,
       description: payload.description || null,
-      createdByUserId: payload.createdByUserId || null,
+      createdByUserId: currentUserId,
       createdAt: now,
       updatedAt: now,
     });

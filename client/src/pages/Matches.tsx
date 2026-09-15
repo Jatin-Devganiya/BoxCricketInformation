@@ -340,7 +340,7 @@ export const Matches: React.FC<MatchesProps> = ({
     }
 
     const targetSeries = seriesList.find((s) => s.id === Number(matchFormData.seriesId));
-    if (!editingMatch && targetSeries && !isAdmin && targetSeries.createdByUserId && targetSeries.createdByUserId !== user?.id) {
+    if (!editingMatch && targetSeries && !isAdmin && targetSeries.createdByUserId && String(targetSeries.createdByUserId) !== String(user?.id)) {
       setMatchFormError(`You can only schedule matches under series that you created.`);
       return;
     }
@@ -355,7 +355,10 @@ export const Matches: React.FC<MatchesProps> = ({
       if (editingMatch) {
         await matchesApi.update(editingMatch.id, matchFormData);
       } else {
-        await matchesApi.create(matchFormData);
+        await matchesApi.create({
+          ...matchFormData,
+          createdByUserId: user?.id,
+        });
       }
       setCreateModalOpen(false);
       fetchMatches();
@@ -367,7 +370,7 @@ export const Matches: React.FC<MatchesProps> = ({
   };
 
   const handleStartMatch = async (m: Match) => {
-    if (!isAdmin && m.createdByUserId && m.createdByUserId !== user?.id) {
+    if (!isAdmin && m.createdByUserId && String(m.createdByUserId) !== String(user?.id)) {
       alert('Only the match creator or an administrator can start this match.');
       return;
     }
@@ -1320,7 +1323,7 @@ export const Matches: React.FC<MatchesProps> = ({
           </div>
         ) : (
           sortedMatches.map((m) => {
-            const isMatchOwner = isAdmin || Boolean(user?.id && m.createdByUserId === user.id);
+            const isMatchOwner = isAdmin || !m.createdByUserId || Boolean(user?.id && String(m.createdByUserId) === String(user.id));
             return (
             <div key={m.id} className="card match-card card-hover">
               <div className="match-card-header">
@@ -1612,7 +1615,7 @@ export const Matches: React.FC<MatchesProps> = ({
             >
               <option value={0}>-- Select Series --</option>
               {seriesList.map((s) => {
-                const isSeriesOwner = isAdmin || Boolean(user?.id && s.createdByUserId === user.id);
+                const isSeriesOwner = isAdmin || !s.createdByUserId || Boolean(user?.id && String(s.createdByUserId) === String(user.id));
                 const canAdd = canAddMatchesToSeries(s.status) && isSeriesOwner;
                 return (
                   <option
@@ -1802,7 +1805,7 @@ export const Matches: React.FC<MatchesProps> = ({
             Live scoring data not available for this match.
           </div>
         ) : (() => {
-          const isScoringAllowed = isAdmin || Boolean(user?.id && (!activeLiveScore.match.createdByUserId || activeLiveScore.match.createdByUserId === user.id));
+          const isScoringAllowed = isAdmin || Boolean(user?.id && (!activeLiveScore.match.createdByUserId || String(activeLiveScore.match.createdByUserId) === String(user.id)));
           return (
           <div className="live-score-modal-body">
             {scorecardError && (

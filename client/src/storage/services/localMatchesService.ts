@@ -8,6 +8,7 @@ import {
   DbMatchBattingPerformance,
   DbMatchBowlingPerformance,
   DbBallEvent,
+  DbUser,
 } from '../dbSchema';
 import { LocalStorageRepository } from '../LocalStorageRepository';
 import { LocalStorageDataStore } from '../LocalStorageDataStore';
@@ -23,6 +24,18 @@ const inningsRepo = new LocalStorageRepository<DbMatchInnings>(STORAGE_KEYS.MATC
 const battingRepo = new LocalStorageRepository<DbMatchBattingPerformance>(STORAGE_KEYS.MATCH_BATTING_PERFORMANCES);
 const bowlingRepo = new LocalStorageRepository<DbMatchBowlingPerformance>(STORAGE_KEYS.MATCH_BOWLING_PERFORMANCES);
 const ballEventRepo = new LocalStorageRepository<DbBallEvent>(STORAGE_KEYS.BALL_EVENTS);
+const userRepo = new LocalStorageRepository<DbUser>(STORAGE_KEYS.USERS);
+
+const getCurrentUserIdFromStorage = (): number | null => {
+  try {
+    const raw = localStorage.getItem('user');
+    if (!raw) return null;
+    const u = JSON.parse(raw);
+    return u?.id ? Number(u.id) : null;
+  } catch {
+    return null;
+  }
+};
 
 export const localMatchesService = {
   getAll: async (params?: { seriesId?: number | string; status?: string; date?: string; sortOrder?: string }): Promise<Match[]> => {
@@ -41,6 +54,7 @@ export const localMatchesService = {
     const series = seriesRepo.getAll();
     const teams = teamRepo.getAll();
     const players = playerRepo.getAll();
+    const users = userRepo.getAll();
 
     // Sort
     list.sort((a, b) => {
@@ -55,6 +69,7 @@ export const localMatchesService = {
       const t2 = teams.find((tm) => String(tm.id) === String(m.team2Id));
       const winTeam = m.winningTeamId ? teams.find((tm) => String(tm.id) === String(m.winningTeamId)) : null;
       const mom = m.momPlayerId ? players.find((p) => String(p.id) === String(m.momPlayerId)) : null;
+      const creator = users.find((u) => String(u.id) === String(m.createdByUserId));
 
       return {
         id: m.id as any,
@@ -81,6 +96,7 @@ export const localMatchesService = {
         momPlayerName: mom ? `${mom.firstName} ${mom.lastName}` : undefined,
         momScore: m.momScore !== undefined ? m.momScore : undefined,
         createdByUserId: m.createdByUserId ? (m.createdByUserId as any) : undefined,
+        createdByUsername: creator ? creator.username : undefined,
       };
     });
   },
@@ -94,6 +110,7 @@ export const localMatchesService = {
     const t2 = teamRepo.getById(m.team2Id);
     const winTeam = m.winningTeamId ? teamRepo.getById(m.winningTeamId) : null;
     const mom = m.momPlayerId ? playerRepo.getById(m.momPlayerId) : null;
+    const creator = m.createdByUserId ? userRepo.getById(m.createdByUserId) : null;
 
     return {
       id: m.id as any,
@@ -120,6 +137,7 @@ export const localMatchesService = {
       momPlayerName: mom ? `${mom.firstName} ${mom.lastName}` : undefined,
       momScore: m.momScore !== undefined ? m.momScore : undefined,
       createdByUserId: m.createdByUserId ? (m.createdByUserId as any) : undefined,
+      createdByUsername: creator ? creator.username : undefined,
     };
   },
 
@@ -135,6 +153,7 @@ export const localMatchesService = {
       throw new Error('A match cannot be scheduled between the same team.');
     }
 
+    const currentUserId = payload.createdByUserId ?? getCurrentUserIdFromStorage();
     const now = new Date().toISOString();
     const newMatch = matchRepo.create({
       seriesId: payload.seriesId,
@@ -146,7 +165,7 @@ export const localMatchesService = {
       scheduledTime: payload.scheduledTime || '18:00',
       address: payload.address || 'Box Cricket Arena',
       status: payload.status || 'Scheduled',
-      createdByUserId: payload.createdByUserId || null,
+      createdByUserId: currentUserId,
       createdAt: now,
       updatedAt: now,
     });
