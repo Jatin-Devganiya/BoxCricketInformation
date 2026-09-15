@@ -33,14 +33,18 @@ export class LocalStorageRepository<T extends { id: EntityId }> implements IRepo
   }
 
   public create(item: Omit<T, 'id'> & { id?: EntityId }): T {
+    let id = item.id;
+    if (id === undefined || id === null || id === '') {
+      const items = this.getAll();
+      const numericIds = items
+        .map((i) => (typeof i.id === 'number' ? i.id : parseInt(String(i.id), 10)))
+        .filter((n) => !isNaN(n) && isFinite(n));
+      id = numericIds.length > 0 ? Math.max(...numericIds) + 1 : 1;
+    }
+
     const finalItem: T = {
       ...item,
-      id:
-        item.id !== undefined && item.id !== null
-          ? item.id
-          : typeof crypto !== 'undefined' && crypto.randomUUID
-          ? crypto.randomUUID()
-          : `id_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      id,
     } as T;
 
     return LocalStorageDataStore.insert<T>(this.collectionKey, finalItem, true);

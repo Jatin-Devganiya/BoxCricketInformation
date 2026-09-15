@@ -56,6 +56,7 @@ class LocalStorageDataStoreManager {
         this.seedInitialDatabase();
       } else {
         this.loadAllFromLocalStorage();
+        this.migrateNonNumericIds();
       }
       this.rebuildIndexes();
       this.initialized = true;
@@ -256,9 +257,12 @@ class LocalStorageDataStoreManager {
     this.ensureInitialized();
     const items = this.getCollection<T>(key);
 
-    // If ID is missing, assign a stable UUID
-    if (!item.id && item.id !== 0) {
-      item.id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `id_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    // If ID is missing, assign a numeric ID
+    if (item.id === undefined || item.id === null || item.id === '') {
+      const numericIds = items
+        .map((i) => (typeof i.id === 'number' ? i.id : parseInt(String(i.id), 10)))
+        .filter((n) => !isNaN(n) && isFinite(n));
+      item.id = numericIds.length > 0 ? Math.max(...numericIds) + 1 : 1;
     }
 
     items.push(item);
@@ -394,6 +398,140 @@ class LocalStorageDataStoreManager {
     this.cache.clear();
     this.rebuildIndexes();
     this.notifyUpdate();
+  }
+
+  private migrateNonNumericIds(): void {
+    try {
+      // 1. Migrate Players
+      const players = this.getCollection<any>(STORAGE_KEYS.PLAYERS);
+      let maxPlayerId = Math.max(
+        0,
+        ...players
+          .map((p) => (typeof p.id === 'number' ? p.id : parseInt(String(p.id), 10)))
+          .filter((n) => !isNaN(n) && isFinite(n))
+      );
+      const playerMap = new Map<string, number>();
+      let playersChanged = false;
+
+      for (const p of players) {
+        if (typeof p.id === 'string' && isNaN(Number(p.id))) {
+          maxPlayerId += 1;
+          playerMap.set(String(p.id), maxPlayerId);
+          p.id = maxPlayerId;
+          playersChanged = true;
+        } else {
+          p.id = Number(p.id);
+        }
+      }
+
+      if (playersChanged) {
+        this.writeCollectionToStorage(STORAGE_KEYS.PLAYERS, players);
+      }
+
+      // 2. Migrate Teams
+      const teams = this.getCollection<any>(STORAGE_KEYS.TEAMS);
+      let maxTeamId = Math.max(
+        0,
+        ...teams
+          .map((t) => (typeof t.id === 'number' ? t.id : parseInt(String(t.id), 10)))
+          .filter((n) => !isNaN(n) && isFinite(n))
+      );
+      const teamMap = new Map<string, number>();
+      let teamsChanged = false;
+
+      for (const t of teams) {
+        if (typeof t.id === 'string' && isNaN(Number(t.id))) {
+          maxTeamId += 1;
+          teamMap.set(String(t.id), maxTeamId);
+          t.id = maxTeamId;
+          teamsChanged = true;
+        } else {
+          t.id = Number(t.id);
+        }
+      }
+
+      if (teamsChanged) {
+        this.writeCollectionToStorage(STORAGE_KEYS.TEAMS, teams);
+      }
+
+      // 3. Migrate Series
+      const series = this.getCollection<any>(STORAGE_KEYS.SERIES);
+      let maxSeriesId = Math.max(
+        0,
+        ...series
+          .map((s) => (typeof s.id === 'number' ? s.id : parseInt(String(s.id), 10)))
+          .filter((n) => !isNaN(n) && isFinite(n))
+      );
+      const seriesMap = new Map<string, number>();
+      let seriesChanged = false;
+
+      for (const s of series) {
+        if (typeof s.id === 'string' && isNaN(Number(s.id))) {
+          maxSeriesId += 1;
+          seriesMap.set(String(s.id), maxSeriesId);
+          s.id = maxSeriesId;
+          seriesChanged = true;
+        } else {
+          s.id = Number(s.id);
+        }
+      }
+
+      if (seriesChanged) {
+        this.writeCollectionToStorage(STORAGE_KEYS.SERIES, series);
+      }
+
+      // 4. Update team_players foreign keys
+      if (playerMap.size > 0 || teamMap.size > 0) {
+        const teamPlayers = this.getCollection<any>(STORAGE_KEYS.TEAM_PLAYERS);
+        let tpChanged = false;
+        for (const tp of teamPlayers) {
+          if (playerMap.has(String(tp.playerId))) {
+            tp.playerId = playerMap.get(String(tp.playerId))!;
+            tpChanged = true;
+          } else if (!isNaN(Number(tp.playerId))) {
+            tp.playerId = Number(tp.playerId);
+          }
+          if (teamMap.has(String(tp.teamId))) {
+            tp.teamId = teamMap.get(String(tp.teamId))!;
+            tpChanged = true;
+          } else if (!isNaN(Number(tp.teamId))) {
+            tp.teamId = Number(tp.teamId);
+          }
+        }
+        if (tpChanged) {
+          this.writeCollectionToStorage(STORAGE_KEYS.TEAM_PLAYERS, teamPlayers);
+        }
+      }
+
+      // 5. Update matches foreign keys
+      if (teamMap.size > 0 || seriesMap.size > 0 || playerMap.size > 0) {
+        const matches = this.getCollection<any>(STORAGE_KEYS.MATCHES);
+        let matchesChanged = false;
+        for (const m of matches) {
+          if (teamMap.has(String(m.team1Id))) {
+            m.team1Id = teamMap.get(String(m.team1Id))!;
+            matchesChanged = true;
+          }
+          if (teamMap.has(String(m.team2Id))) {
+            m.team2Id = teamMap.get(String(m.team2Id))!;
+            matchesChanged = true;
+          }
+          if (seriesMap.has(String(m.seriesId))) {
+            m.seriesId = seriesMap.get(String(m.seriesId))!;
+            matchesChanged = true;
+          }
+          if (playerMap.has(String(m.momPlayerId))) {
+            m.momPlayerId = playerMap.get(String(m.momPlayerId))!;
+            matchesChanged = true;
+          }
+        }
+        if (matchesChanged) {
+          this.writeCollectionToStorage(STORAGE_KEYS.MATCHES, matches);
+        }
+      }
+    } catch (err) {
+      console.warn('Non-numeric ID migration notice:', err);
+    }
   }
 }
 
