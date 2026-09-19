@@ -50,7 +50,7 @@ export const Teams: React.FC = () => {
   const [selectedTeamDetail, setSelectedTeamDetail] = useState<TeamDetail | null>(null);
   const [rosterLoading, setRosterLoading] = useState<boolean>(false);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
-  const [selectedPlayerToAdd, setSelectedPlayerToAdd] = useState<number>(0);
+  const [selectedPlayerToAdd, setSelectedPlayerToAdd] = useState<number | string>('');
 
   // Edit / Create Modal
   const [editModalOpen, setEditModalOpen] = useState<boolean>(false);
@@ -169,23 +169,23 @@ export const Teams: React.FC = () => {
   };
 
   const handleAddPlayerToTeam = async () => {
-    if (!selectedTeamDetail || selectedPlayerToAdd <= 0) return;
+    if (!selectedTeamDetail || !selectedPlayerToAdd || selectedPlayerToAdd === '0' || selectedPlayerToAdd === 0) return;
     try {
-      await teamsApi.addPlayer(selectedTeamDetail.id, selectedPlayerToAdd);
+      await teamsApi.addPlayer(selectedTeamDetail.id, selectedPlayerToAdd as any);
       const updated = await teamsApi.getById(selectedTeamDetail.id);
       setSelectedTeamDetail(updated);
-      setSelectedPlayerToAdd(0);
+      setSelectedPlayerToAdd('');
       fetchTeams();
     } catch (err) {
       alert('Failed to assign player to team.');
     }
   };
 
-  const handleRemovePlayerFromTeam = async (playerId: number) => {
+  const handleRemovePlayerFromTeam = async (playerId: number | string) => {
     if (!selectedTeamDetail) return;
     if (!window.confirm('Remove player from this team?')) return;
     try {
-      await teamsApi.removePlayer(selectedTeamDetail.id, playerId);
+      await teamsApi.removePlayer(selectedTeamDetail.id, playerId as any);
       const updated = await teamsApi.getById(selectedTeamDetail.id);
       setSelectedTeamDetail(updated);
       fetchTeams();
@@ -612,13 +612,13 @@ export const Teams: React.FC = () => {
                   <select
                     className="form-select"
                     value={selectedPlayerToAdd}
-                    onChange={(e) => setSelectedPlayerToAdd(Number(e.target.value))}
+                    onChange={(e) => setSelectedPlayerToAdd(e.target.value)}
                   >
-                    <option value={0}>-- Select player to add to squad --</option>
+                    <option value="">-- Select player to add to squad --</option>
                     {allPlayers
-                      .filter((p) => !selectedTeamDetail.players.some((tp) => tp.id === p.id))
+                      .filter((p) => !selectedTeamDetail.players.some((tp) => String(tp.id) === String(p.id)))
                       .map((p) => (
-                        <option key={p.id} value={p.id}>
+                        <option key={String(p.id)} value={p.id}>
                           {p.fullName} ({p.playerCategory})
                         </option>
                       ))}
@@ -627,7 +627,7 @@ export const Teams: React.FC = () => {
                 <button
                   className="btn btn-primary"
                   onClick={handleAddPlayerToTeam}
-                  disabled={selectedPlayerToAdd <= 0}
+                  disabled={!selectedPlayerToAdd || selectedPlayerToAdd === '0' || selectedPlayerToAdd === 0}
                 >
                   <UserPlus size={16} /> Add to Squad
                 </button>

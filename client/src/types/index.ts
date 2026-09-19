@@ -30,6 +30,8 @@ export interface Player {
   totalWickets?: number;
   battingRank?: number | null;
   bowlingRank?: number | null;
+  createdByUserId?: number;
+  createdByUsername?: string;
   createdAt: string;
 }
 
@@ -93,6 +95,8 @@ export interface Team {
   shortName: string;
   status: string;
   playerCount: number;
+  createdByUserId?: number;
+  createdByUsername?: string;
 }
 
 export interface TeamDetail {
@@ -101,6 +105,8 @@ export interface TeamDetail {
   shortName: string;
   status: string;
   players: Player[];
+  createdByUserId?: number;
+  createdByUsername?: string;
 }
 
 export interface Series {
@@ -112,6 +118,8 @@ export interface Series {
   description?: string;
   totalMatches: number;
   completedMatches: number;
+  createdByUserId?: number;
+  createdByUsername?: string;
 }
 
 export interface SeriesDetail extends Series {
@@ -142,6 +150,58 @@ export interface Match {
   momScore?: number | null;
   resultType?: string;
   winningMargin?: number;
+  createdByUserId?: number;
+  createdByUsername?: string;
+}
+
+export interface ActiveSession {
+  id: number;
+  userId: number;
+  username: string;
+  sessionId: string;
+  roles: string[];
+  loginTime: string;
+  status: string;
+  ipAddress?: string;
+  hostName?: string;
+}
+
+export interface LoginHistory {
+  id: number;
+  userId: number;
+  username: string;
+  sessionId: string;
+  roles: string[];
+  loginTime: string;
+  logoutTime?: string;
+  status: string;
+  ipAddress?: string;
+  hostName?: string;
+  logoutReason?: string;
+  logoutByUserId?: number;
+  logoutByUsername?: string;
+}
+
+export interface LoginHistoryFilter {
+  username?: string;
+  userId?: number;
+  role?: string;
+  status?: string;
+  ipAddress?: string;
+  fromDate?: string;
+  toDate?: string;
+  logoutFromDate?: string;
+  logoutToDate?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface PagedResult<T> {
+  items: T[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
 }
 
 export interface BattingRecord {
@@ -458,3 +518,21 @@ export interface MomCalculationResult {
   bowlingSummary: string;
   leaderboard: PlayerMomScore[];
 }
+
+export interface ExportMetadata {
+  applicationName: string;
+  exportVersion: string;
+  schemaVersion: string;
+  storageMode: string;
+  exportedAt: string;
+  recordCounts: Record<string, number>;
+}
+
+export interface ImportValidationResult {
+  isValid: boolean;
+  errors: string[];
+  warnings: string[];
+  recordCounts: Record<string, number>;
+  data?: any;
+}
+

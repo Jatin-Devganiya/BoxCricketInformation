@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using CricketApp.Api.Attributes;
 using CricketApp.Api.Data;
 using CricketApp.Api.DTOs;
@@ -22,12 +23,24 @@ public class PlayersController : ControllerBase
         _statsService = statsService;
     }
 
+    private int? GetCurrentUserId()
+    {
+        var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        return int.TryParse(claim, out var id) ? id : null;
+    }
+
+    private bool IsAdmin()
+    {
+        return User.IsInRole("Admin");
+    }
+
     [HttpGet]
     public async Task<IActionResult> GetPlayers([FromQuery] string? search, [FromQuery] string? category, [FromQuery] string? status)
     {
         var query = _context.Players
             .Include(p => p.TeamPlayers.Where(tp => tp.Status == "Active"))
                 .ThenInclude(tp => tp.Team)
+            .Include(p => p.CreatedByUser)
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(search))
@@ -99,6 +112,8 @@ public class PlayersController : ControllerBase
                 UserId = p.UserId,
                 CurrentTeamName = p.TeamPlayers.Select(tp => tp.Team.Name).FirstOrDefault(),
                 ManOfTheMatchCount = _context.Matches.Count(m => m.MOMPlayerId == p.Id),
+                CreatedByUserId = p.CreatedByUserId,
+                CreatedByUsername = p.CreatedByUser != null ? p.CreatedByUser.Username : null,
                 CreatedAt = p.CreatedAt
             })
             .ToListAsync();
@@ -120,6 +135,7 @@ public class PlayersController : ControllerBase
         var player = await _context.Players
             .Include(p => p.TeamPlayers.Where(tp => tp.Status == "Active"))
                 .ThenInclude(tp => tp.Team)
+            .Include(p => p.CreatedByUser)
             .FirstOrDefaultAsync(p => p.Id == id);
 
         if (player == null) return NotFound(new { message = "Player not found." });
@@ -168,6 +184,8 @@ public class PlayersController : ControllerBase
             TotalWickets = playerWickets,
             BattingRank = batRank,
             BowlingRank = bowlRank,
+            CreatedByUserId = player.CreatedByUserId,
+            CreatedByUsername = player.CreatedByUser?.Username,
             CreatedAt = player.CreatedAt
         });
     }
@@ -207,6 +225,8 @@ public class PlayersController : ControllerBase
             }
         }
 
+        var currentUserId = GetCurrentUserId();
+
         var player = new Player
         {
             FirstName = trimmedFirstName,
@@ -214,6 +234,7 @@ public class PlayersController : ControllerBase
             PlayerCategory = req.PlayerCategory,
             Status = playerStatus,
             UserId = req.UserId,
+            CreatedByUserId = currentUserId,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -247,6 +268,8 @@ public class PlayersController : ControllerBase
             PlayerCategory = player.PlayerCategory,
             Status = player.Status,
             UserId = player.UserId,
+            CreatedByUserId = player.CreatedByUserId,
+            CreatedByUsername = User.Identity?.Name,
             CreatedAt = player.CreatedAt
         });
     }
@@ -262,6 +285,16 @@ public class PlayersController : ControllerBase
 
         var player = await _context.Players.FindAsync(id);
         if (player == null) return NotFound(new { success = false, message = "Player not found." });
+
+        // Ownership enforcement: Umpire can only modify players that they created
+        if (!IsAdmin())
+        {
+            var currentUserId = GetCurrentUserId();
+            if (player.CreatedByUserId.HasValue && player.CreatedByUserId.Value != currentUserId)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "Access denied. You can only modify players that you created." });
+            }
+        }
 
         var trimmedFirstName = req.FirstName.Trim();
         var trimmedLastName = req.LastName.Trim();
@@ -325,6 +358,7 @@ public class PlayersController : ControllerBase
             PlayerCategory = player.PlayerCategory,
             Status = player.Status,
             UserId = player.UserId,
+            CreatedByUserId = player.CreatedByUserId,
             CreatedAt = player.CreatedAt
         });
     }
@@ -335,6 +369,16 @@ public class PlayersController : ControllerBase
     {
         var player = await _context.Players.FindAsync(id);
         if (player == null) return NotFound(new { message = "Player not found." });
+
+        // Ownership enforcement: Umpire can only delete players that they created
+        if (!IsAdmin())
+        {
+            var currentUserId = GetCurrentUserId();
+            if (player.CreatedByUserId.HasValue && player.CreatedByUserId.Value != currentUserId)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = "Access denied. You can only delete players that you created." });
+            }
+        }
 
         // Soft delete to protect historical performance records
         player.Status = "Inactive";

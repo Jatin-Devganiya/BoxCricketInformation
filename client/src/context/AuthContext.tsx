@@ -22,6 +22,8 @@ interface AuthContextType {
   loading: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
+  sessionTerminatedNotice: string | null;
+  clearSessionTerminatedNotice: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -33,6 +35,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'));
   const [loading, setLoading] = useState<boolean>(true);
+  const [sessionTerminatedNotice, setSessionTerminatedNotice] = useState<string | null>(() => {
+    return sessionStorage.getItem('session_terminated_notice');
+  });
+
+  useEffect(() => {
+    const handleSessionTerminated = (e: any) => {
+      const reason = e.detail || 'Your session has been terminated by an administrator.';
+      setSessionTerminatedNotice(reason);
+      setToken(null);
+      setUser(null);
+    };
+
+    window.addEventListener('session-terminated', handleSessionTerminated);
+    return () => window.removeEventListener('session-terminated', handleSessionTerminated);
+  }, []);
 
   useEffect(() => {
     const verifyUser = async () => {
@@ -51,15 +68,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     verifyUser();
   }, [token]);
 
+  const clearSessionTerminatedNotice = () => {
+    setSessionTerminatedNotice(null);
+    sessionStorage.removeItem('session_terminated_notice');
+  };
+
   const login = async (username: string, password: string) => {
     const response = await authApi.login({ username, password });
     setToken(response.token);
     setUser(response.user);
+    clearSessionTerminatedNotice();
     localStorage.setItem('token', response.token);
     localStorage.setItem('user', JSON.stringify(response.user));
   };
 
   const logout = () => {
+    authApi.logout().catch(() => {});
     setToken(null);
     setUser(null);
     localStorage.removeItem('token');
@@ -130,6 +154,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loading,
         login,
         logout,
+        sessionTerminatedNotice,
+        clearSessionTerminatedNotice,
       }}
     >
       {children}

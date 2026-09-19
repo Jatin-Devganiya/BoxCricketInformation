@@ -15,11 +15,16 @@ public class UsersController : ControllerBase
 {
     private readonly CricketDbContext _context;
     private readonly IPermissionService _permissionService;
+    private readonly ISessionService _sessionService;
 
-    public UsersController(CricketDbContext context, IPermissionService permissionService)
+    public UsersController(
+        CricketDbContext context,
+        IPermissionService permissionService,
+        ISessionService sessionService)
     {
         _context = context;
         _permissionService = permissionService;
+        _sessionService = sessionService;
     }
 
     [HttpGet]
@@ -192,6 +197,13 @@ public class UsersController : ControllerBase
         var effective = await _permissionService.GetEffectivePermissionsAsync(user.Id);
         var overrides = await _permissionService.GetUserOverridesAsync(user.Id);
 
+        if (string.Equals(user.Status, "Inactive", StringComparison.OrdinalIgnoreCase))
+        {
+            var adminUserIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            int? adminUserId = int.TryParse(adminUserIdClaim, out var aid) ? aid : null;
+            await _sessionService.EndAllUserSessionsAsync(user.Id, "AccountDeactivated", adminUserId);
+        }
+
         return Ok(new UserDto
         {
             Id = user.Id,
@@ -221,6 +233,10 @@ public class UsersController : ControllerBase
         user.Status = "Inactive";
         user.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
+
+        var adminUserIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        int? adminUserId = int.TryParse(adminUserIdClaim, out var aid) ? aid : null;
+        await _sessionService.EndAllUserSessionsAsync(user.Id, "AccountDeactivated", adminUserId);
 
         return Ok(new { message = "User marked as inactive." });
     }

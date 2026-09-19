@@ -9,10 +9,19 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace CricketApp.Api.Services;
 
+public class AuthenticateResult
+{
+    public bool Success { get; set; }
+    public bool IsAlreadyLoggedIn { get; set; }
+    public string? ErrorMessage { get; set; }
+    public LoginResponse? Response { get; set; }
+}
+
 public interface IAuthService
 {
-    Task<LoginResponse?> AuthenticateAsync(LoginRequest request);
+    Task<AuthenticateResult> AuthenticateAsync(LoginRequest request, string? ipAddress = null, string? hostName = null);
     Task<UserProfileResponse?> GetCurrentUserAsync(int userId);
+    Task<bool> LogoutAsync(int userId, string sessionId);
 }
 
 public class AuthService : IAuthService
@@ -20,15 +29,21 @@ public class AuthService : IAuthService
     private readonly CricketDbContext _context;
     private readonly IConfiguration _configuration;
     private readonly IPermissionService _permissionService;
+    private readonly ISessionService _sessionService;
 
-    public AuthService(CricketDbContext context, IConfiguration configuration, IPermissionService permissionService)
+    public AuthService(
+        CricketDbContext context,
+        IConfiguration configuration,
+        IPermissionService permissionService,
+        ISessionService sessionService)
     {
         _context = context;
         _configuration = configuration;
         _permissionService = permissionService;
+        _sessionService = sessionService;
     }
 
-    public async Task<LoginResponse?> AuthenticateAsync(LoginRequest request)
+    public async Task<AuthenticateResult> AuthenticateAsync(LoginRequest request, string? ipAddress = null, string? hostName = null)
     {
         var user = await _context.Users
             .Include(u => u.UserRoles)
@@ -37,14 +52,38 @@ public class AuthService : IAuthService
 
         if (user == null || user.Status != "Active")
         {
-            return null;
+            return new AuthenticateResult
+            {
+                Success = false,
+                ErrorMessage = "Invalid username or password, or account is inactive."
+            };
         }
 
         bool isPasswordValid = BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash);
         if (!isPasswordValid)
         {
-            return null;
+            return new AuthenticateResult
+            {
+                Success = false,
+                ErrorMessage = "Invalid username or password, or account is inactive."
+            };
         }
+
+        // Prevent simultaneous login: check if active session already exists for this user
+        var (hasActiveSession, existingSessionId, _) = await _sessionService.CheckActiveSessionAsync(user.Id);
+        if (hasActiveSession)
+        {
+            return new AuthenticateResult
+            {
+                Success = false,
+                IsAlreadyLoggedIn = true,
+                ErrorMessage = "This user is already logged in. Please log out from the existing session before logging in again."
+            };
+        }
+
+        // Create new active session record
+        var newSessionId = Guid.NewGuid().ToString("N");
+        await _sessionService.CreateSessionAsync(user.Id, user.Username, newSessionId, ipAddress, hostName);
 
         var roles = user.UserRoles.Select(ur => ur.Role.Name).ToList();
         var effectivePermissions = await _permissionService.GetEffectivePermissionsAsync(user.Id);
@@ -60,7 +99,8 @@ public class AuthService : IAuthService
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new(ClaimTypes.Name, user.Username),
             new("FirstName", user.FirstName),
-            new("LastName", user.LastName)
+            new("LastName", user.LastName),
+            new("SessionId", newSessionId)
         };
 
         foreach (var role in roles)
@@ -85,19 +125,23 @@ public class AuthService : IAuthService
         var token = tokenHandler.CreateToken(tokenDescriptor);
         var tokenString = tokenHandler.WriteToken(token);
 
-        return new LoginResponse
+        return new AuthenticateResult
         {
-            Token = tokenString,
-            ExpiresAt = expiresAt,
-            User = new UserProfileResponse
+            Success = true,
+            Response = new LoginResponse
             {
-                Id = user.Id,
-                FirstName = user.FirstName,
-                LastName = user.LastName,
-                Username = user.Username,
-                Status = user.Status,
-                Roles = roles,
-                EffectivePermissions = effectivePermissions
+                Token = tokenString,
+                ExpiresAt = expiresAt,
+                User = new UserProfileResponse
+                {
+                    Id = user.Id,
+                    FirstName = user.FirstName,
+                    LastName = user.LastName,
+                    Username = user.Username,
+                    Status = user.Status,
+                    Roles = roles,
+                    EffectivePermissions = effectivePermissions
+                }
             }
         };
     }
@@ -123,5 +167,10 @@ public class AuthService : IAuthService
             Roles = user.UserRoles.Select(ur => ur.Role.Name).ToList(),
             EffectivePermissions = effectivePermissions
         };
+    }
+
+    public async Task<bool> LogoutAsync(int userId, string sessionId)
+    {
+        return await _sessionService.EndSessionAsync(sessionId, "UserLogout", userId);
     }
 }

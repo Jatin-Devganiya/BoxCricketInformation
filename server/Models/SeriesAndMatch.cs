@@ -8,6 +8,8 @@ public class Series
     public DateTime EndDate { get; set; }
     public string Status { get; set; } = "Scheduled"; // Scheduled, InProgress, Completed, Cancelled
     public string? Description { get; set; }
+    public int? CreatedByUserId { get; set; }
+    public User? CreatedByUser { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
@@ -43,6 +45,8 @@ public class Match
     public Player? MOMPlayer { get; set; }
     public double? MOMScore { get; set; }
 
+    public int? CreatedByUserId { get; set; }
+    public User? CreatedByUser { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

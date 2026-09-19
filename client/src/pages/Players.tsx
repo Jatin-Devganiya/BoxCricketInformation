@@ -63,7 +63,7 @@ const BowlingIcon: React.FC<{ size?: number; style?: React.CSSProperties }> = ({
 );
 
 export const Players: React.FC = () => {
-  const { canManagePlayers } = useAuth();
+  const { canManagePlayers, user, isAdmin } = useAuth();
   const [players, setPlayers] = useState<Player[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -498,7 +498,9 @@ export const Players: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                paginatedPlayers.map((p) => (
+                paginatedPlayers.map((p) => {
+                  const isPlayerOwner = isAdmin || !p.createdByUserId || Boolean(user?.id && String(p.createdByUserId) === String(user.id));
+                  return (
                   <tr key={p.id}>
                     {/* Batting Rank Column */}
                     <td style={{ textAlign: 'center', padding: '0.65rem 0.35rem' }}>
@@ -574,7 +576,22 @@ export const Players: React.FC = () => {
                       )}
                     </td>
 
-                    <td style={{ fontWeight: 600 }}>{p.fullName}</td>
+                    <td style={{ fontWeight: 600 }}>
+                      <div>{p.fullName}</div>
+                      {p.createdByUsername && (
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                          <span style={{
+                            padding: '1px 5px',
+                            borderRadius: '4px',
+                            background: isPlayerOwner ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.06)',
+                            color: isPlayerOwner ? '#10b981' : 'var(--text-secondary)',
+                            fontWeight: 500
+                          }}>
+                            By: {p.createdByUsername}{isPlayerOwner && !isAdmin ? ' (You)' : ''}
+                          </span>
+                        </div>
+                      )}
+                    </td>
                     <td>
                       <span
                         className={`badge ${
@@ -623,7 +640,7 @@ export const Players: React.FC = () => {
                       )}
                     </td>
                     <td style={{ textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', gap: '0.5rem' }}>
+                      <div style={{ display: 'inline-flex', gap: '0.5rem', alignItems: 'center' }}>
                         <button
                           className="btn btn-sm btn-secondary"
                           onClick={() => handleOpenStats(p)}
@@ -632,27 +649,43 @@ export const Players: React.FC = () => {
                           <BarChart2 size={14} /> Stats
                         </button>
                         {canManagePlayers && (
-                          <>
-                            <button
-                              className="btn btn-sm btn-secondary"
-                              onClick={() => handleOpenEdit(p)}
-                              title="Edit Player"
+                          isPlayerOwner ? (
+                            <>
+                              <button
+                                className="btn btn-sm btn-secondary"
+                                onClick={() => handleOpenEdit(p)}
+                                title="Edit Player"
+                              >
+                                <Edit2 size={14} />
+                              </button>
+                              <button
+                                className="btn btn-sm btn-danger"
+                                onClick={() => handleDeletePlayer(p.id)}
+                                title="Deactivate Player"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </>
+                          ) : (
+                            <span
+                              style={{
+                                fontSize: '0.72rem',
+                                color: 'var(--text-muted)',
+                                alignSelf: 'center',
+                                fontStyle: 'italic',
+                                padding: '0 0.25rem'
+                              }}
+                              title={`Created by ${p.createdByUsername || 'another umpire'}`}
                             >
-                              <Edit2 size={14} />
-                            </button>
-                            <button
-                              className="btn btn-sm btn-danger"
-                              onClick={() => handleDeletePlayer(p.id)}
-                              title="Deactivate Player"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </>
+                              View-Only
+                            </span>
+                          )
                         )}
                       </div>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>

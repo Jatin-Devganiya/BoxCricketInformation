@@ -26,7 +26,7 @@ interface SeriesProps {
 }
 
 export const Series: React.FC<SeriesProps> = ({ onViewScorecard }) => {
-  const { canManageSeries } = useAuth();
+  const { canManageSeries, user, isAdmin } = useAuth();
   const [seriesList, setSeriesList] = useState<SeriesType[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -246,7 +246,10 @@ export const Series: React.FC<SeriesProps> = ({ onViewScorecard }) => {
       if (editingSeries) {
         await seriesApi.update(editingSeries.id, formData);
       } else {
-        await seriesApi.create(formData);
+        await seriesApi.create({
+          ...formData,
+          createdByUserId: user?.id,
+        });
       }
       setEditModalOpen(false);
       fetchSeries();
@@ -400,10 +403,24 @@ export const Series: React.FC<SeriesProps> = ({ onViewScorecard }) => {
                   const startStr = new Date(s.startDate).toLocaleDateString();
                   const endStr = new Date(s.endDate).toLocaleDateString();
                   const isSingleDay = startStr === endStr;
+                  const isOwner = isAdmin || !s.createdByUserId || Boolean(user?.id && String(s.createdByUserId) === String(user.id));
                   return (
                     <tr key={s.id}>
                       <td style={{ fontWeight: 600 }}>
                         <div>{s.name}</div>
+                        {s.createdByUsername && (
+                          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                            <span style={{
+                              padding: '1px 5px',
+                              borderRadius: '4px',
+                              background: isOwner ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.06)',
+                              color: isOwner ? '#10b981' : 'var(--text-secondary)',
+                              fontWeight: 500
+                            }}>
+                              By: {s.createdByUsername}{isOwner && !isAdmin ? ' (You)' : ''}
+                            </span>
+                          </div>
+                        )}
                         {s.description && (
                           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                             {s.description}
@@ -437,7 +454,7 @@ export const Series: React.FC<SeriesProps> = ({ onViewScorecard }) => {
                         </span>
                       </td>
                       <td style={{ textAlign: 'right' }}>
-                        <div style={{ display: 'inline-flex', gap: '0.5rem' }}>
+                        <div style={{ display: 'inline-flex', gap: '0.5rem', alignItems: 'center' }}>
                           <button
                             className="btn btn-sm btn-secondary"
                             onClick={() => handleOpenDetails(s)}
@@ -446,24 +463,39 @@ export const Series: React.FC<SeriesProps> = ({ onViewScorecard }) => {
                             <Trophy size={14} /> Matches
                           </button>
                           {canManageSeries && (
-                            <>
-                              <button
-                                className="btn btn-sm btn-secondary"
-                                onClick={() => handleOpenEdit(s)}
-                                title="Edit Series"
-                              >
-                                <Edit2 size={14} />
-                              </button>
-                              {!isSeriesStatusLocked(s.status) && (
+                            isOwner ? (
+                              <>
                                 <button
-                                  className="btn btn-sm btn-danger"
-                                  onClick={() => handleDeleteSeries(s.id)}
-                                  title="Cancel Series"
+                                  className="btn btn-sm btn-secondary"
+                                  onClick={() => handleOpenEdit(s)}
+                                  title="Edit Series"
                                 >
-                                  <Trash2 size={14} />
+                                  <Edit2 size={14} />
                                 </button>
-                              )}
-                            </>
+                                {!isSeriesStatusLocked(s.status) && (
+                                  <button
+                                    className="btn btn-sm btn-danger"
+                                    onClick={() => handleDeleteSeries(s.id)}
+                                    title="Cancel Series"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                )}
+                              </>
+                            ) : (
+                              <span
+                                style={{
+                                  fontSize: '0.72rem',
+                                  color: 'var(--text-muted)',
+                                  alignSelf: 'center',
+                                  fontStyle: 'italic',
+                                  padding: '0 0.25rem'
+                                }}
+                                title={`Managed by ${s.createdByUsername || 'another umpire'}`}
+                              >
+                                View-Only
+                              </span>
+                            )
                           )}
                         </div>
                       </td>
