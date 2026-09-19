@@ -26,7 +26,12 @@ const storageMap = new Map<string, string>();
   dispatchEvent: () => true,
 };
 (globalThis as any).CustomEvent = class {
-  constructor(public type: string, public eventInitDict?: any) {}
+  type: string;
+  eventInitDict: any;
+  constructor(type: string, eventInitDict?: any) {
+    this.type = type;
+    this.eventInitDict = eventInitDict;
+  }
 };
 
 async function runTests() {
@@ -241,6 +246,14 @@ async function runTests() {
   // Select valid next bowler: Kuldeep (10)
   live = await localLiveScoringService.nextOver(testMatch.id, live.currentInnings!.id, 10);
   assert(live.currentInnings?.currentBowler?.playerId === 10, 'Next bowler selected successfully');
+  assert(live.currentInnings?.isOverComplete === false, 'isOverComplete is false once next bowler is selected');
+  assert(live.currentInnings?.currentOverNumber === 2, 'Current over number advanced to 2');
+
+  // Score ball in over 2
+  live = await localLiveScoringService.recordBall(testMatch.id, live.currentInnings!.id, { eventType: 'Normal', runs: 1 });
+  assert(live.currentInnings?.legalBalls === 7, 'Legal balls incremented to 7 (Over 2 Ball 1)');
+  assert(live.currentInnings?.currentOverDeliveriesCount === 1, 'Over 2 has 1 delivery recorded');
+  assert(live.currentInnings?.isOverComplete === false, 'isOverComplete remains false during over 2');
 
   // --- Test 7: Hat-Trick Algorithm ---
   console.log('\n7. Testing Hat-Trick Calculation Engine...');

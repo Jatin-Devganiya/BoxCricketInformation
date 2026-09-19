@@ -2392,17 +2392,77 @@ export const Matches: React.FC<MatchesProps> = ({
                       )}
                     </div>
 
+                    {/* Incoming Batsman Required Banner */}
+                    {currentInnings?.requiresNewBatsman && (
+                      <div
+                        style={{
+                          padding: '0.85rem 1.15rem',
+                          borderRadius: '8px',
+                          background: 'rgba(245, 158, 11, 0.12)',
+                          border: '1px solid rgba(245, 158, 11, 0.35)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '1rem',
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                          <UserCheck size={20} style={{ color: '#fbbf24', flexShrink: 0 }} />
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: '0.92rem', color: '#fbbf24' }}>
+                              Wicket Fallen — Incoming Batsman Required
+                            </div>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.15rem' }}>
+                              {!currentInnings.striker
+                                ? 'Striker position is vacant.'
+                                : !currentInnings.nonStriker
+                                ? 'Non-Striker position is vacant.'
+                                : 'A batsman position is vacant.'}{' '}
+                              Click "Select Incoming Batsman" or click the vacant crease card below to choose batsman.
+                            </div>
+                          </div>
+                        </div>
+                        {canScoreLive && isScoringAllowed && (
+                          <button
+                            className="btn btn-primary"
+                            onClick={() => {
+                              setNewBatsmanId(0);
+                              setNewBatsmanModalOpen(true);
+                            }}
+                            disabled={actionLoading}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 1rem' }}
+                          >
+                            <UserPlus size={16} /> Select Incoming Batsman
+                          </button>
+                        )}
+                      </div>
+                    )}
+
                     {/* Crease Widget: Striker, Non-Striker, Bowler */}
                     <div className="crease-grid">
                       {/* Striker Card */}
-                      <div className="crease-card active-striker">
+                      <div
+                        className={`crease-card active-striker ${!currentInnings?.striker && canScoreLive && isScoringAllowed ? 'crease-card-vacant' : ''}`}
+                        onClick={() => {
+                          if (canScoreLive && isScoringAllowed && !currentInnings?.striker) {
+                            setNewBatsmanId(0);
+                            setNewBatsmanModalOpen(true);
+                          }
+                        }}
+                        style={!currentInnings?.striker && canScoreLive && isScoringAllowed ? { cursor: 'pointer', border: '1px dashed #10b981' } : undefined}
+                      >
                         <div className="crease-card-header">
                           <span style={{ color: '#10b981', display: 'flex', alignItems: 'center', gap: '3px' }}>
                             🏏 Striker
                           </span>
                         </div>
                         <div className="crease-player-name">
-                          {currentInnings?.striker?.playerName || 'Select Striker'}
+                          {currentInnings?.striker?.playerName || (
+                            <span style={{ color: '#10b981', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <UserPlus size={14} /> Select Striker
+                            </span>
+                          )}
                         </div>
                         <div className="crease-stats-line">
                           <span className="crease-runs-large">{currentInnings?.striker?.runs ?? 0}</span>
@@ -2413,6 +2473,20 @@ export const Matches: React.FC<MatchesProps> = ({
                           <span>6s: <strong>{currentInnings?.striker?.sixes ?? 0}</strong></span>
                           <span>SR: <strong>{currentInnings?.striker?.strikeRate ?? 0}</strong></span>
                         </div>
+                        {canScoreLive && isScoringAllowed && !currentInnings?.striker && (
+                          <button
+                            className="btn btn-sm btn-primary"
+                            style={{ marginTop: '0.6rem', width: '100%', fontSize: '0.75rem', padding: '0.3rem 0.5rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setNewBatsmanId(0);
+                              setNewBatsmanModalOpen(true);
+                            }}
+                            disabled={actionLoading}
+                          >
+                            <UserPlus size={13} /> Select Striker
+                          </button>
+                        )}
                       </div>
 
                       {/* Manual Strike Swap Button */}
@@ -2430,12 +2504,25 @@ export const Matches: React.FC<MatchesProps> = ({
                       )}
 
                       {/* Non-Striker Card */}
-                      <div className="crease-card">
+                      <div
+                        className={`crease-card ${!currentInnings?.nonStriker && canScoreLive && isScoringAllowed ? 'crease-card-vacant' : ''}`}
+                        onClick={() => {
+                          if (canScoreLive && isScoringAllowed && !currentInnings?.nonStriker) {
+                            setNewBatsmanId(0);
+                            setNewBatsmanModalOpen(true);
+                          }
+                        }}
+                        style={!currentInnings?.nonStriker && canScoreLive && isScoringAllowed ? { cursor: 'pointer', border: '1px dashed #f59e0b' } : undefined}
+                      >
                         <div className="crease-card-header">
                           <span>Non-Striker</span>
                         </div>
                         <div className="crease-player-name">
-                          {currentInnings?.nonStriker?.playerName || 'Select Non-Striker'}
+                          {currentInnings?.nonStriker?.playerName || (
+                            <span style={{ color: '#f59e0b', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <UserPlus size={14} /> Select Non-Striker
+                            </span>
+                          )}
                         </div>
                         <div className="crease-stats-line">
                           <span className="crease-runs-large">{currentInnings?.nonStriker?.runs ?? 0}</span>
@@ -2446,6 +2533,20 @@ export const Matches: React.FC<MatchesProps> = ({
                           <span>6s: <strong>{currentInnings?.nonStriker?.sixes ?? 0}</strong></span>
                           <span>SR: <strong>{currentInnings?.nonStriker?.strikeRate ?? 0}</strong></span>
                         </div>
+                        {canScoreLive && isScoringAllowed && !currentInnings?.nonStriker && (
+                          <button
+                            className="btn btn-sm btn-primary"
+                            style={{ marginTop: '0.6rem', width: '100%', fontSize: '0.75rem', padding: '0.3rem 0.5rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setNewBatsmanId(0);
+                              setNewBatsmanModalOpen(true);
+                            }}
+                            disabled={actionLoading}
+                          >
+                            <UserPlus size={13} /> Select Non-Striker
+                          </button>
+                        )}
                       </div>
 
                       {/* Bowler Card */}
@@ -2678,6 +2779,43 @@ export const Matches: React.FC<MatchesProps> = ({
                             Live Delivery Result
                           </div>
 
+                          {/* Batsman Vacant Scoring Pause Callout */}
+                          {currentInnings?.requiresNewBatsman && (
+                            <div
+                              style={{
+                                marginBottom: '0.75rem',
+                                padding: '0.6rem 0.85rem',
+                                background: 'rgba(245, 158, 11, 0.1)',
+                                border: '1px solid rgba(245, 158, 11, 0.3)',
+                                borderRadius: '6px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '0.75rem',
+                                fontSize: '0.82rem',
+                                color: '#fbbf24',
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <UserPlus size={15} />
+                                <span>Scoring paused: Incoming batsman must be selected after wicket.</span>
+                              </div>
+                              {canScoreLive && isScoringAllowed && (
+                                <button
+                                  className="btn btn-sm btn-primary"
+                                  onClick={() => {
+                                    setNewBatsmanId(0);
+                                    setNewBatsmanModalOpen(true);
+                                  }}
+                                  disabled={actionLoading}
+                                  style={{ padding: '0.25rem 0.65rem', fontSize: '0.75rem' }}
+                                >
+                                  Select Batsman
+                                </button>
+                              )}
+                            </div>
+                          )}
+
                           {/* Runs Grid: 0 to 6 */}
                           <div className="runs-pad-grid">
                             {[0, 1, 2, 3, 4, 5, 6].map((run) => (
@@ -2698,7 +2836,7 @@ export const Matches: React.FC<MatchesProps> = ({
                             <button
                               className="action-pad-btn btn-wicket"
                               onClick={handleOpenWicketDialog}
-                              disabled={actionLoading || currentInnings?.isOverComplete}
+                              disabled={actionLoading || currentInnings?.isOverComplete || currentInnings?.requiresNewBatsman}
                             >
                               <Shield size={14} /> WICKET
                             </button>
@@ -2706,7 +2844,7 @@ export const Matches: React.FC<MatchesProps> = ({
                             <button
                               className="action-pad-btn btn-noball"
                               onClick={() => setExtraSubMenu(extraSubMenu === 'NoBall' ? null : 'NoBall')}
-                              disabled={actionLoading || currentInnings?.isOverComplete}
+                              disabled={actionLoading || currentInnings?.isOverComplete || currentInnings?.requiresNewBatsman}
                             >
                               NO BALL
                             </button>
@@ -2714,7 +2852,7 @@ export const Matches: React.FC<MatchesProps> = ({
                             <button
                               className="action-pad-btn btn-wide"
                               onClick={() => setExtraSubMenu(extraSubMenu === 'Wide' ? null : 'Wide')}
-                              disabled={actionLoading || currentInnings?.isOverComplete}
+                              disabled={actionLoading || currentInnings?.isOverComplete || currentInnings?.requiresNewBatsman}
                             >
                               WIDE
                             </button>
@@ -2722,7 +2860,7 @@ export const Matches: React.FC<MatchesProps> = ({
                             <button
                               className="action-pad-btn btn-legbye"
                               onClick={() => setExtraSubMenu(extraSubMenu === 'LegBye' ? null : 'LegBye')}
-                              disabled={actionLoading || currentInnings?.isOverComplete}
+                              disabled={actionLoading || currentInnings?.isOverComplete || currentInnings?.requiresNewBatsman}
                             >
                               LEG BYE
                             </button>
@@ -2730,7 +2868,7 @@ export const Matches: React.FC<MatchesProps> = ({
                             <button
                               className="action-pad-btn btn-deadball"
                               onClick={handleRecordDeadBall}
-                              disabled={actionLoading || currentInnings?.isOverComplete}
+                              disabled={actionLoading || currentInnings?.isOverComplete || currentInnings?.requiresNewBatsman}
                             >
                               DEAD BALL
                             </button>
@@ -3341,7 +3479,7 @@ export const Matches: React.FC<MatchesProps> = ({
       <Modal
         isOpen={newBatsmanModalOpen}
         onClose={() => setNewBatsmanModalOpen(false)}
-        title="Select New Batsman"
+        title={!currentInnings?.striker ? 'Select New Batsman (Striker)' : 'Select New Batsman (Non-Striker)'}
         size="sm"
         footer={
           <button
@@ -3356,30 +3494,44 @@ export const Matches: React.FC<MatchesProps> = ({
       >
         <div style={{ padding: '0.5rem 0' }}>
           <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
-            A wicket has fallen. Please select an eligible incoming batsman from the batting team:
+            A wicket has fallen ({!currentInnings?.striker ? 'Striker' : 'Non-Striker'} position is vacant). Please select an eligible incoming batsman from the batting team:
           </div>
 
-          <div className="form-group">
-            <label className="form-label">Incoming Batsman</label>
-            <select
-              className="form-select"
-              value={newBatsmanId}
-              onChange={(e) => setNewBatsmanId(Number(e.target.value))}
-            >
-              <option value={0}>-- Select New Batsman --</option>
-              {battingPlayers
-                .filter((p) => {
-                  const isDismissed = currentInnings?.battingPerformances.some((bp) => bp.playerId === p.id && bp.isOut);
-                  const isAtCrease = currentInnings?.striker?.playerId === p.id || currentInnings?.nonStriker?.playerId === p.id;
-                  return !isDismissed && !isAtCrease;
-                })
-                .map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.fullName} ({p.playerCategory})
-                  </option>
-                ))}
-            </select>
-          </div>
+          {(() => {
+            const availableBatsmen = battingPlayers.filter((p) => {
+              const isDismissed = currentInnings?.battingPerformances.some((bp) => bp.playerId === p.id && bp.isOut);
+              const isAtCrease = currentInnings?.striker?.playerId === p.id || currentInnings?.nonStriker?.playerId === p.id;
+              return !isDismissed && !isAtCrease;
+            });
+
+            if (availableBatsmen.length === 0) {
+              return (
+                <div className="alert alert-warning" style={{ fontSize: '0.85rem', padding: '0.75rem' }}>
+                  No more eligible batsmen available on the batting team roster. The team is all out. You can declare or complete this innings.
+                </div>
+              );
+            }
+
+            return (
+              <div className="form-group">
+                <label className="form-label">
+                  Incoming Batsman {!currentInnings?.striker ? '(Striker Position)' : '(Non-Striker Position)'} *
+                </label>
+                <select
+                  className="form-select"
+                  value={newBatsmanId}
+                  onChange={(e) => setNewBatsmanId(Number(e.target.value))}
+                >
+                  <option value={0}>-- Select New Batsman --</option>
+                  {availableBatsmen.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.fullName} ({p.playerCategory})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            );
+          })()}
         </div>
       </Modal>
 

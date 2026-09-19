@@ -74,12 +74,41 @@ export const localLiveScoringService = {
 
       const legalBalls = inn.balls || 0;
       const oversDisplay = toCricketOvers(legalBalls);
-      const currentOverNumber = Math.floor(legalBalls / 6) + 1;
-      const currentOverLegalBalls = legalBalls % 6;
-      const isOverComplete = legalBalls > 0 && legalBalls % 6 === 0;
+
+      // Sort events by id/createdAt
+      const sortedEvents = [...events].sort((a, b) => Number(a.id) - Number(b.id));
+      const lastEvent = sortedEvents.length > 0 ? sortedEvents[sortedEvents.length - 1] : null;
+
+      const completedOverNum = Math.floor(legalBalls / 6);
+      const completedOverBalls = legalBalls >= 6
+        ? sortedEvents.filter((e) => e.overNumber === completedOverNum)
+        : [];
+      const completedOverLastEvent = completedOverBalls.length > 0
+        ? completedOverBalls[completedOverBalls.length - 1]
+        : null;
+
+      // An over has completed and is waiting for next bowler selection if:
+      // 1. Innings is InProgress
+      // 2. Legal balls is a multiple of 6 and > 0
+      // 3. We have ball events
+      // 4. The last event in the match was in the completed over (i.e. no events yet in the new over)
+      // 5. currentBowlerId in MatchInnings is STILL the bowler who completed the last ball
+      const isOverAwaitingNextBowler =
+        inn.status === 'InProgress' &&
+        legalBalls > 0 &&
+        legalBalls % 6 === 0 &&
+        lastEvent != null &&
+        lastEvent.overNumber === completedOverNum &&
+        String(inn.currentBowlerId) === String(lastEvent.bowlerPlayerId);
+
+      const currentOverNumber = isOverAwaitingNextBowler
+        ? completedOverNum
+        : completedOverNum + 1;
 
       // Current over deliveries
-      const currentOverEvents = events.filter((e) => e.overNumber === currentOverNumber);
+      const currentOverEvents = sortedEvents.filter((e) => e.overNumber === currentOverNumber);
+      const isOverComplete = isOverAwaitingNextBowler;
+      const currentOverLegalBalls = currentOverEvents.filter((e) => e.isLegalBall).length;
 
       const allDeliveries: BallEventItem[] = events.map((e) => {
         const striker = players.find((p) => String(p.id) === String(e.strikerPlayerId));
@@ -194,15 +223,11 @@ export const localLiveScoringService = {
       }
 
       // Previous bowler
-      let previousBowlerId: any;
+      let previousBowlerId: any = completedOverLastEvent ? completedOverLastEvent.bowlerPlayerId : undefined;
       let previousBowlerName: string | undefined;
-      if (currentOverNumber > 1) {
-        const prevOverBalls = events.filter((e) => e.overNumber === currentOverNumber - 1);
-        if (prevOverBalls.length > 0) {
-          previousBowlerId = prevOverBalls[prevOverBalls.length - 1].bowlerPlayerId;
-          const pb = players.find((pl) => String(pl.id) === String(previousBowlerId));
-          if (pb) previousBowlerName = `${pb.firstName} ${pb.lastName}`;
-        }
+      if (previousBowlerId) {
+        const pb = players.find((pl) => String(pl.id) === String(previousBowlerId));
+        if (pb) previousBowlerName = `${pb.firstName} ${pb.lastName}`;
       }
 
       // Batting / Bowling records for scorecard tabs
@@ -252,7 +277,9 @@ export const localLiveScoringService = {
       const overs = legalBalls / 6.0;
       const currentRunRate = overs > 0 ? Math.round(((inn.runs || 0) / overs) * 100) / 100 : 0.0;
 
-      const requiresNewBatsman = (!inn.currentStrikerId || !inn.currentNonStrikerId) && (inn.wickets || 0) < 10 && inn.status === 'InProgress';
+      const battingRoster = teamPlayerRepo.find((tp) => String(tp.teamId) === String(inn.teamId) && tp.status === 'Active');
+      const maxWickets = battingRoster.length > 1 ? Math.min(10, battingRoster.length - 1) : 10;
+      const requiresNewBatsman = (!inn.currentStrikerId || !inn.currentNonStrikerId) && (inn.wickets || 0) < maxWickets && inn.status === 'InProgress';
 
       return {
         id: inn.id as any,
@@ -279,8 +306,8 @@ export const localLiveScoringService = {
         previousBowlerName,
         isOverComplete,
         requiresNewBatsman,
-        canChangeBowlerPreOver: currentOverDeliveries.length === 0,
-        canReplaceBowlerMidOver: currentOverDeliveries.length > 0 && currentOverLegalBalls < 6,
+        canChangeBowlerPreOver: inn.status === 'InProgress' && !isOverAwaitingNextBowler && !!inn.currentBowlerId && currentOverDeliveries.length === 0,
+        canReplaceBowlerMidOver: inn.status === 'InProgress' && !isOverAwaitingNextBowler && !!inn.currentBowlerId && currentOverDeliveries.length > 0 && currentOverLegalBalls < 6,
         currentOverLegalBalls,
         currentOverDeliveriesCount: currentOverEvents.length,
         currentOverDeliveries,
@@ -420,7 +447,8 @@ export const localLiveScoringService = {
     if (inn.balls > 0 && inn.balls % 6 === 0) {
       const completedOverNum = Math.floor(inn.balls / 6);
       const events = ballEventRepo.find((b) => String(b.inningsId) === String(inn.id));
-      const lastBall = events[events.length - 1];
+      const sortedEvents = [...events].sort((a, b) => Number(a.id) - Number(b.id));
+      const lastBall = sortedEvents.length > 0 ? sortedEvents[sortedEvents.length - 1] : null;
       if (lastBall && lastBall.overNumber === completedOverNum && String(inn.currentBowlerId) === String(lastBall.bowlerPlayerId)) {
         throw new Error('Current over is complete. Please select the next bowler before scoring.');
       }
@@ -561,6 +589,17 @@ export const localLiveScoringService = {
       throw new Error('Striker, Non-Striker, and Bowler must all be set before recording a wicket.');
     }
 
+    // Over completion check: if over ended, require next bowler selection before accepting new balls
+    if (inn.balls > 0 && inn.balls % 6 === 0) {
+      const completedOverNum = Math.floor(inn.balls / 6);
+      const events = ballEventRepo.find((b) => String(b.inningsId) === String(inn.id));
+      const sortedEvents = [...events].sort((a, b) => Number(a.id) - Number(b.id));
+      const lastBall = sortedEvents.length > 0 ? sortedEvents[sortedEvents.length - 1] : null;
+      if (lastBall && lastBall.overNumber === completedOverNum && String(inn.currentBowlerId) === String(lastBall.bowlerPlayerId)) {
+        throw new Error('Current over is complete. Please select the next bowler before scoring.');
+      }
+    }
+
     if (
       String(payload.dismissedPlayerId) !== String(inn.currentStrikerId) &&
       String(payload.dismissedPlayerId) !== String(inn.currentNonStrikerId)
@@ -692,15 +731,29 @@ export const localLiveScoringService = {
     const inn = inningsRepo.getById(inningsId);
     if (!inn) throw new Error('Innings not found');
 
+    if (inn.status !== 'InProgress') {
+      throw new Error('Innings is not in progress.');
+    }
+
+    if ((inn.balls || 0) % 6 !== 0 || (inn.balls || 0) === 0) {
+      throw new Error('Current over is not yet complete (requires 6 legal balls).');
+    }
+
     const events = ballEventRepo.find((b) => String(b.inningsId) === String(inn.id));
-    const currentOverNumber = Math.floor((inn.balls || 0) / 6);
-    const lastOverBalls = events.filter((e) => e.overNumber === currentOverNumber);
+    const sortedEvents = [...events].sort((a, b) => Number(a.id) - Number(b.id));
+    const completedOverNum = Math.floor((inn.balls || 0) / 6);
+    const lastOverBalls = sortedEvents.filter((e) => e.overNumber === completedOverNum);
 
     if (lastOverBalls.length > 0) {
       const prevBowler = lastOverBalls[lastOverBalls.length - 1].bowlerPlayerId;
       if (String(prevBowler) === String(nextBowlerPlayerId)) {
-        throw new Error('Bowler cannot bowl two consecutive overs.');
+        throw new Error('The same bowler cannot bowl two consecutive overs.');
       }
+    }
+
+    // Idempotent safety: if bowler is already set to the requested bowler, simply return current state
+    if (String(inn.currentBowlerId) === String(nextBowlerPlayerId)) {
+      return await localLiveScoringService.getLiveScore(matchId);
     }
 
     const now = new Date().toISOString();
@@ -765,14 +818,26 @@ export const localLiveScoringService = {
     }
 
     const events = ballEventRepo.find((b) => String(b.inningsId) === String(inn.id));
-    const legalBallsInOver = (inn.balls || 0) % 6;
-    const currentOverNumber = Math.floor((inn.balls || 0) / 6) + 1;
-    const currentOverEvents = events.filter((e) => e.overNumber === currentOverNumber);
+    const sortedEvents = [...events].sort((a, b) => Number(a.id) - Number(b.id));
+    const lastEvent = sortedEvents.length > 0 ? sortedEvents[sortedEvents.length - 1] : null;
+    const completedOverNum = Math.floor((inn.balls || 0) / 6);
+
+    const isOverAwaitingNextBowler =
+      inn.status === 'InProgress' &&
+      (inn.balls || 0) > 0 &&
+      (inn.balls || 0) % 6 === 0 &&
+      lastEvent != null &&
+      lastEvent.overNumber === completedOverNum &&
+      String(inn.currentBowlerId) === String(lastEvent.bowlerPlayerId);
+
+    const currentOverNumber = isOverAwaitingNextBowler ? completedOverNum : completedOverNum + 1;
+    const currentOverEvents = sortedEvents.filter((e) => e.overNumber === currentOverNumber);
+    const legalBallsInOver = currentOverEvents.filter((e) => e.isLegalBall).length;
     const isMidOver = currentOverEvents.length > 0 && legalBallsInOver < 6;
 
     let prevOverBowlerId: any = null;
-    if (currentOverNumber > 1) {
-      const prevOverBalls = events.filter((e) => e.overNumber === currentOverNumber - 1);
+    if (completedOverNum >= 1) {
+      const prevOverBalls = sortedEvents.filter((e) => e.overNumber === completedOverNum);
       if (prevOverBalls.length > 0) {
         prevOverBowlerId = prevOverBalls[prevOverBalls.length - 1].bowlerPlayerId;
       }
@@ -867,8 +932,11 @@ export const localLiveScoringService = {
     const maxLegalBalls = (match.requiredOvers || 6) * 6;
     const now = new Date().toISOString();
 
+    const battingRoster = teamPlayerRepo.find((tp) => String(tp.teamId) === String(inn.teamId) && tp.status === 'Active');
+    const maxWickets = battingRoster.length > 1 ? Math.min(10, battingRoster.length - 1) : 10;
+
     if (inn.inningsNumber === 1) {
-      if ((inn.balls || 0) >= maxLegalBalls || (inn.wickets || 0) >= 10) {
+      if ((inn.balls || 0) >= maxLegalBalls || (inn.wickets || 0) >= maxWickets) {
         inningsRepo.update(inn.id, { status: 'Completed', updatedAt: now });
       }
     } else if (inn.inningsNumber === 2) {
@@ -878,7 +946,7 @@ export const localLiveScoringService = {
         if ((inn.runs || 0) > (inn1.runs || 0)) {
           inningsRepo.update(inn.id, { status: 'Completed', updatedAt: now });
           matchFinished = true;
-        } else if ((inn.balls || 0) >= maxLegalBalls || (inn.wickets || 0) >= 10) {
+        } else if ((inn.balls || 0) >= maxLegalBalls || (inn.wickets || 0) >= maxWickets) {
           inningsRepo.update(inn.id, { status: 'Completed', updatedAt: now });
           matchFinished = true;
         }
