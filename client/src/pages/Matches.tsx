@@ -597,22 +597,22 @@ export const Matches: React.FC<MatchesProps> = ({
   const isCurrentInningsCompleted = currentInnings && currentInnings.status === 'Completed';
 
   const battingPlayers =
-    currentInnings?.battingTeamId === activeLiveScore?.match.team1Id ? team1Players : team2Players;
+    String(currentInnings?.battingTeamId) === String(activeLiveScore?.match.team1Id) ? team1Players : team2Players;
 
   const bowlingPlayers =
-    currentInnings?.battingTeamId === activeLiveScore?.match.team1Id ? team2Players : team1Players;
+    String(currentInnings?.battingTeamId) === String(activeLiveScore?.match.team1Id) ? team2Players : team1Players;
 
   const setupBattingPlayers =
-    setupBattingTeamId === activeLiveScore?.match.team1Id
+    String(setupBattingTeamId) === String(activeLiveScore?.match.team1Id)
       ? team1Players
-      : setupBattingTeamId === activeLiveScore?.match.team2Id
+      : String(setupBattingTeamId) === String(activeLiveScore?.match.team2Id)
       ? team2Players
       : [];
 
   const setupBowlingPlayers =
-    setupBattingTeamId === activeLiveScore?.match.team1Id
+    String(setupBattingTeamId) === String(activeLiveScore?.match.team1Id)
       ? team2Players
-      : setupBattingTeamId === activeLiveScore?.match.team2Id
+      : String(setupBattingTeamId) === String(activeLiveScore?.match.team2Id)
       ? team1Players
       : [];
 
@@ -2171,7 +2171,7 @@ export const Matches: React.FC<MatchesProps> = ({
 
                       <div className="form-group" style={{ marginBottom: '1.5rem' }}>
                         <label className="form-label">
-                          Opening Bowler {setupBattingTeamId > 0 && `(from ${setupBattingTeamId === activeLiveScore.match.team1Id ? activeLiveScore.match.team2Name : activeLiveScore.match.team1Name})`} *
+                          Opening Bowler {setupBattingTeamId > 0 && `(from ${String(setupBattingTeamId) === String(activeLiveScore.match.team1Id) ? activeLiveScore.match.team2Name : activeLiveScore.match.team1Name})`} *
                         </label>
                         <select
                           className="form-select"
@@ -2237,7 +2237,7 @@ export const Matches: React.FC<MatchesProps> = ({
                               setActiveInningsTab(2);
                               setSetupInningsNumber(2);
                               const secondTeam =
-                                activeLiveScore.match.team1Id === currentInnings?.battingTeamId
+                                String(activeLiveScore.match.team1Id) === String(currentInnings?.battingTeamId)
                                   ? activeLiveScore.match.team2Id
                                   : activeLiveScore.match.team1Id;
                               setSetupBattingTeamId(secondTeam);
@@ -3499,8 +3499,26 @@ export const Matches: React.FC<MatchesProps> = ({
 
           {(() => {
             const availableBatsmen = battingPlayers.filter((p) => {
-              const isDismissed = currentInnings?.battingPerformances.some((bp) => bp.playerId === p.id && bp.isOut);
-              const isAtCrease = currentInnings?.striker?.playerId === p.id || currentInnings?.nonStriker?.playerId === p.id;
+              // 1. Check if the player is already dismissed in this innings across all records
+              const isDismissedInBattingPerformances = currentInnings?.battingPerformances?.some(
+                (bp) => String(bp.playerId) === String(p.id) && (bp.isOut || (bp.dismissalType && bp.dismissalType !== 'NotOut'))
+              );
+              const isDismissedInDeliveries = currentInnings?.allDeliveries?.some(
+                (d) => d.isWicket && String(d.dismissedPlayerId) === String(p.id)
+              );
+              const isLastDismissed =
+                currentInnings?.lastDismissedPlayerId != null &&
+                String(currentInnings.lastDismissedPlayerId) === String(p.id);
+
+              const isDismissed = Boolean(isDismissedInBattingPerformances || isDismissedInDeliveries || isLastDismissed);
+
+              // 2. Check if the player is currently batting at the crease
+              const isAtCrease = Boolean(
+                (currentInnings?.striker?.playerId != null && String(currentInnings.striker.playerId) === String(p.id)) ||
+                (currentInnings?.nonStriker?.playerId != null && String(currentInnings.nonStriker.playerId) === String(p.id))
+              );
+
+              // Only show remaining players who have not yet batted or been dismissed
               return !isDismissed && !isAtCrease;
             });
 
@@ -3577,7 +3595,7 @@ export const Matches: React.FC<MatchesProps> = ({
               {bowlingPlayers
                 .filter((p) => {
                   const prevId = currentInnings?.previousBowlerId || currentInnings?.currentBowler?.playerId;
-                  return p.id !== prevId;
+                  return prevId == null || String(p.id) !== String(prevId);
                 })
                 .map((p) => (
                   <option key={p.id} value={p.id}>

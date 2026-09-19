@@ -281,6 +281,9 @@ export const localLiveScoringService = {
       const maxWickets = battingRoster.length > 1 ? Math.min(10, battingRoster.length - 1) : 10;
       const requiresNewBatsman = (!inn.currentStrikerId || !inn.currentNonStrikerId) && (inn.wickets || 0) < maxWickets && inn.status === 'InProgress';
 
+      const lastWicketEvent = events.slice().reverse().find((e) => e.isWicket && e.dismissedPlayerId);
+      const lastDismissedPlayerId = lastWicketEvent ? (lastWicketEvent.dismissedPlayerId as any) : undefined;
+
       return {
         id: inn.id as any,
         matchId: inn.matchId as any,
@@ -306,6 +309,7 @@ export const localLiveScoringService = {
         previousBowlerName,
         isOverComplete,
         requiresNewBatsman,
+        lastDismissedPlayerId,
         canChangeBowlerPreOver: inn.status === 'InProgress' && !isOverAwaitingNextBowler && !!inn.currentBowlerId && currentOverDeliveries.length === 0,
         canReplaceBowlerMidOver: inn.status === 'InProgress' && !isOverAwaitingNextBowler && !!inn.currentBowlerId && currentOverDeliveries.length > 0 && currentOverLegalBalls < 6,
         currentOverLegalBalls,
