@@ -148,7 +148,9 @@ Create relational tables for:
 ### Players
 
 -   Id
--   UserId (foriegn key with Users.Id)
+-   FirstName
+-   LastName
+-   Username if the player is linked to an application user
 -   Status
 -   PlayerCategory
 -   CreatedAt
@@ -195,14 +197,12 @@ Application authentication belongs to Users.
 -   Team1Id
 -   Team2Id
 -   MatchOrder
--   RequiredOvers
 -   ScheduledDate
 -   ScheduledTime
 -   Address
 -   Status
 -   WinningTeamId
 -   Result
--   MOMPlayerId
 -   CreatedAt
 -   UpdatedAt
 
