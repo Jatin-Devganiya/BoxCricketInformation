@@ -340,13 +340,13 @@ export const localLiveScoringService = {
     if (inn2 && inn1) {
       const target = (inn1.runs || 0) + 1;
       const currentRuns = inn2.runs || 0;
-      const runsToWin = target - currentRuns;
+      const runsToWin = Math.max(0, target - currentRuns);
       const totalLegalBalls = (dbMatch.requiredOvers || 6) * 6;
       const ballsLeft = Math.max(0, totalLegalBalls - (inn2.balls || 0));
       const isTargetChased = currentRuns >= target;
       const isTargetNotReached = ballsLeft <= 0 && runsToWin > 0;
 
-      let displayText = `${ballsLeft} Balls Left • ${runsToWin} Runs to Win`;
+      let displayText = `${runsToWin} ${runsToWin === 1 ? 'run' : 'runs'} required from ${ballsLeft} ${ballsLeft === 1 ? 'ball' : 'balls'}`;
       if (isTargetChased) displayText = 'Target Chased';
       else if (isTargetNotReached) displayText = 'Target Not Reached';
 
@@ -362,6 +362,16 @@ export const localLiveScoringService = {
         isTargetNotReached,
         isActive: inn2.status === 'InProgress' && !isTargetChased && !isTargetNotReached,
       };
+
+      if (liveInn2) {
+        liveInn2.targetRuns = target;
+        liveInn2.chasingStatus = chasingStatus;
+        if (ballsLeft > 0 && runsToWin > 0) {
+          liveInn2.requiredRunRate = Math.round((runsToWin / (ballsLeft / 6.0)) * 100) / 100;
+        } else if (runsToWin === 0) {
+          liveInn2.requiredRunRate = 0;
+        }
+      }
     }
 
     // Calculated Match Result

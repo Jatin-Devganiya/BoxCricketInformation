@@ -2311,86 +2311,172 @@ export const Matches: React.FC<MatchesProps> = ({
                   /* State C: Active In-Progress Live Scoring */
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     {/* Top Live Scoreboard Header */}
-                    <div className="live-scoreboard-header">
-                      <div className="live-score-top-row">
-                        <div>
-                          <div style={{ fontSize: '0.8rem', textTransform: 'uppercase', color: 'var(--accent-cricket)', fontWeight: 700 }}>
-                            {activeInningsTab === 1 ? '1st Innings' : '2nd Innings'} • Live
-                          </div>
-                          <div style={{ fontSize: '1.15rem', fontWeight: 700 }}>
-                            {currentInnings?.battingTeamName}
-                          </div>
-                        </div>
+                    {/* Top Live Scoreboard Header */}
+                    {(() => {
+                      const isSecondInnings = activeInningsTab === 2 || currentInnings?.inningsNumber === 2;
+                      const inn1 = activeLiveScore?.innings1;
+                      const inn2 = isSecondInnings ? (currentInnings?.inningsNumber === 2 ? currentInnings : activeLiveScore?.innings2) : undefined;
+                      const matchReqOvers = activeLiveScore?.match?.requiredOvers || 6;
+                      const totalLegalBalls = matchReqOvers * 6;
 
-                        <div className="live-score-main-metric">
-                          <div className="live-score-runs-wickets">
-                            {currentInnings?.runs}/{currentInnings?.wickets}
-                          </div>
-                          <div className="live-score-overs">
-                            Overs: {currentInnings?.oversDisplay}
-                          </div>
-                        </div>
-                      </div>
+                      let chaseInfo: {
+                        target: number;
+                        currentRuns: number;
+                        runsToWin: number;
+                        ballsLeft: number;
+                        rrr: string;
+                        isTargetChased: boolean;
+                        isTargetNotReached: boolean;
+                        displayText: string;
+                      } | null = null;
 
-                      <div className="live-rates-bar">
-                        <span>CRR: <strong>{currentInnings?.currentRunRate.toFixed(2)}</strong></span>
-                        {currentInnings?.targetRuns && (
-                          <>
+                      if (isSecondInnings && (inn1 || currentInnings?.targetRuns || currentInnings?.chasingStatus || activeLiveScore?.chasingStatus)) {
+                        const target = currentInnings?.targetRuns 
+                          || currentInnings?.chasingStatus?.target 
+                          || activeLiveScore?.chasingStatus?.target 
+                          || (inn1 ? (inn1.runs || 0) + 1 : 1);
+
+                        const currentRuns = inn2?.runs ?? currentInnings?.runs ?? 0;
+                        const legalBallsBowled = inn2?.legalBalls ?? currentInnings?.legalBalls ?? 0;
+                        const runsToWin = Math.max(0, target - currentRuns);
+                        const ballsLeft = Math.max(0, totalLegalBalls - legalBallsBowled);
+
+                        const isTargetChased = currentInnings?.chasingStatus?.isTargetChased 
+                          || activeLiveScore?.chasingStatus?.isTargetChased 
+                          || currentRuns >= target;
+
+                        const isTargetNotReached = currentInnings?.chasingStatus?.isTargetNotReached 
+                          || activeLiveScore?.chasingStatus?.isTargetNotReached 
+                          || (ballsLeft <= 0 && runsToWin > 0);
+
+                        const rrr = ballsLeft > 0 && runsToWin > 0
+                          ? (runsToWin / (ballsLeft / 6.0)).toFixed(2)
+                          : '0.00';
+
+                        let displayText = `${runsToWin} ${runsToWin === 1 ? 'run' : 'runs'} required from ${ballsLeft} ${ballsLeft === 1 ? 'ball' : 'balls'}`;
+                        if (isTargetChased) {
+                          displayText = `Target Chased — ${currentInnings?.battingTeamName || 'Chasing Team'} Won!`;
+                        } else if (isTargetNotReached) {
+                          displayText = `Target Not Reached — Needed ${runsToWin} runs from ${ballsLeft} balls`;
+                        }
+
+                        chaseInfo = {
+                          target,
+                          currentRuns,
+                          runsToWin,
+                          ballsLeft,
+                          rrr,
+                          isTargetChased,
+                          isTargetNotReached,
+                          displayText,
+                        };
+                      }
+
+                      return (
+                        <div className="live-scoreboard-header">
+                          <div className="live-score-top-row">
+                            <div>
+                              <div style={{ fontSize: '0.8rem', textTransform: 'uppercase', color: 'var(--accent-cricket)', fontWeight: 700 }}>
+                                {activeInningsTab === 1 ? '1st Innings' : '2nd Innings'} • Live
+                              </div>
+                              <div style={{ fontSize: '1.15rem', fontWeight: 700 }}>
+                                {currentInnings?.battingTeamName}
+                              </div>
+                            </div>
+
+                            <div className="live-score-main-metric">
+                              <div className="live-score-runs-wickets">
+                                {currentInnings?.runs}/{currentInnings?.wickets}
+                              </div>
+                              <div className="live-score-overs">
+                                Overs: {currentInnings?.oversDisplay}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="live-rates-bar">
+                            <span>CRR: <strong>{currentInnings?.currentRunRate.toFixed(2)}</strong></span>
+                            {chaseInfo && (
+                              <>
+                                <span>•</span>
+                                <span style={{ color: '#f59e0b', fontWeight: 700 }}>
+                                  Target: {chaseInfo.target}
+                                </span>
+                              </>
+                            )}
+                            {chaseInfo && Number(chaseInfo.rrr) > 0 && !chaseInfo.isTargetChased && !chaseInfo.isTargetNotReached && (
+                              <>
+                                <span>•</span>
+                                <span style={{ color: '#60a5fa' }}>
+                                  RRR: <strong>{chaseInfo.rrr}</strong>
+                                </span>
+                              </>
+                            )}
                             <span>•</span>
-                            <span style={{ color: '#f59e0b', fontWeight: 700 }}>
-                              Target: {currentInnings.targetRuns}
-                            </span>
-                          </>
-                        )}
-                        {currentInnings?.requiredRunRate && (
-                          <>
-                            <span>•</span>
-                            <span style={{ color: '#60a5fa' }}>
-                              RRR: <strong>{currentInnings.requiredRunRate.toFixed(2)}</strong>
-                            </span>
-                          </>
-                        )}
-                        <span>•</span>
-                        <span>Extras: {currentInnings?.extras || 0}</span>
-                      </div>
+                            <span>Extras: {currentInnings?.extras || 0}</span>
+                          </div>
 
-                      {/* Live Chasing Status Message (Second Innings Target Chase) */}
-                      {currentInnings?.inningsNumber === 2 && currentInnings?.chasingStatus && (
-                        <div
-                          style={{
-                            marginTop: '0.85rem',
-                            padding: '0.65rem 1.25rem',
-                            borderRadius: '8px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '0.5rem',
-                            fontWeight: 700,
-                            fontSize: '1rem',
-                            letterSpacing: '0.2px',
-                            background: currentInnings.chasingStatus.isTargetChased
-                              ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(5, 150, 105, 0.35))'
-                              : currentInnings.chasingStatus.isTargetNotReached
-                              ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.25), rgba(185, 28, 28, 0.35))'
-                              : 'linear-gradient(135deg, rgba(245, 158, 11, 0.18), rgba(217, 119, 6, 0.25))',
-                            border: currentInnings.chasingStatus.isTargetChased
-                              ? '1px solid rgba(16, 185, 129, 0.5)'
-                              : currentInnings.chasingStatus.isTargetNotReached
-                              ? '1px solid rgba(239, 68, 68, 0.5)'
-                              : '1px solid rgba(245, 158, 11, 0.4)',
-                            color: currentInnings.chasingStatus.isTargetChased
-                              ? '#34d399'
-                              : currentInnings.chasingStatus.isTargetNotReached
-                              ? '#f87171'
-                              : '#fbbf24',
-                            boxShadow: '0 4px 16px rgba(0,0,0,0.2)'
-                          }}
-                        >
-                          <span>🔥</span>
-                          <span>{currentInnings.chasingStatus.displayText}</span>
+                          {/* Live Chasing Status Message (Second Innings Target Chase) */}
+                          {chaseInfo && (
+                            <div
+                              id="live-chasing-status-banner"
+                              style={{
+                                marginTop: '0.85rem',
+                                padding: '0.75rem 1.25rem',
+                                borderRadius: '8px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '0.75rem',
+                                flexWrap: 'wrap',
+                                fontWeight: 700,
+                                fontSize: '1rem',
+                                letterSpacing: '0.2px',
+                                background: chaseInfo.isTargetChased
+                                  ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.22), rgba(5, 150, 105, 0.32))'
+                                  : chaseInfo.isTargetNotReached
+                                  ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.22), rgba(185, 28, 28, 0.32))'
+                                  : 'linear-gradient(135deg, rgba(245, 158, 11, 0.18), rgba(217, 119, 6, 0.28))',
+                                border: chaseInfo.isTargetChased
+                                  ? '1px solid rgba(16, 185, 129, 0.5)'
+                                  : chaseInfo.isTargetNotReached
+                                  ? '1px solid rgba(239, 68, 68, 0.5)'
+                                  : '1px solid rgba(245, 158, 11, 0.45)',
+                                color: chaseInfo.isTargetChased
+                                  ? '#34d399'
+                                  : chaseInfo.isTargetNotReached
+                                  ? '#f87171'
+                                  : '#fbbf24',
+                                boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', fontSize: '1.02rem' }}>
+                                <span>{chaseInfo.isTargetChased ? '🏆' : chaseInfo.isTargetNotReached ? '❌' : '🎯'}</span>
+                                <span>{chaseInfo.displayText}</span>
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', fontSize: '0.85rem' }}>
+                                <span style={{ color: 'var(--text-secondary)' }}>
+                                  Target: <strong style={{ color: '#fbbf24' }}>{chaseInfo.target}</strong>
+                                </span>
+                                {!chaseInfo.isTargetChased && !chaseInfo.isTargetNotReached && (
+                                  <>
+                                    <span style={{ opacity: 0.4 }}>|</span>
+                                    <span style={{ color: 'var(--text-secondary)' }}>
+                                      RRR: <strong style={{ color: '#60a5fa' }}>{chaseInfo.rrr}</strong>
+                                    </span>
+                                    <span style={{ opacity: 0.4 }}>|</span>
+                                    <span style={{ color: 'var(--text-secondary)' }}>
+                                      Balls Left: <strong>{chaseInfo.ballsLeft}</strong>
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
+                      );
+                    })()}
 
                     {/* Incoming Batsman Required Banner */}
                     {currentInnings?.requiresNewBatsman && (

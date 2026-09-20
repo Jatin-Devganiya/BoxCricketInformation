@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { teamsApi, playersApi } from '../api/client';
 import { Team, TeamDetail, Player } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { Modal } from '../components/Modal';
+import { MultiSelectDropdown, MultiSelectOption } from '../components/MultiSelectDropdown';
 import {
   Shield,
   Plus,
@@ -50,7 +51,8 @@ export const Teams: React.FC = () => {
   const [selectedTeamDetail, setSelectedTeamDetail] = useState<TeamDetail | null>(null);
   const [rosterLoading, setRosterLoading] = useState<boolean>(false);
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
-  const [selectedPlayerToAdd, setSelectedPlayerToAdd] = useState<number | string>('');
+  const [selectedPlayersToAdd, setSelectedPlayersToAdd] = useState<(number | string)[]>([]);
+  const [addingToSquad, setAddingToSquad] = useState<boolean>(false);
 
   // Edit / Create Modal
   const [editModalOpen, setEditModalOpen] = useState<boolean>(false);
@@ -156,6 +158,7 @@ export const Teams: React.FC = () => {
     try {
       setRosterLoading(true);
       setRosterModalOpen(true);
+      setSelectedPlayersToAdd([]);
       const detail = await teamsApi.getById(team.id);
       setSelectedTeamDetail(detail);
 
@@ -169,15 +172,20 @@ export const Teams: React.FC = () => {
   };
 
   const handleAddPlayerToTeam = async () => {
-    if (!selectedTeamDetail || !selectedPlayerToAdd || selectedPlayerToAdd === '0' || selectedPlayerToAdd === 0) return;
+    if (!selectedTeamDetail || selectedPlayersToAdd.length === 0 || addingToSquad) return;
     try {
-      await teamsApi.addPlayer(selectedTeamDetail.id, selectedPlayerToAdd as any);
+      setAddingToSquad(true);
+      for (const playerId of selectedPlayersToAdd) {
+        await teamsApi.addPlayer(selectedTeamDetail.id, playerId as any);
+      }
       const updated = await teamsApi.getById(selectedTeamDetail.id);
       setSelectedTeamDetail(updated);
-      setSelectedPlayerToAdd('');
+      setSelectedPlayersToAdd([]);
       fetchTeams();
     } catch (err) {
-      alert('Failed to assign player to team.');
+      alert('Failed to assign player(s) to team.');
+    } finally {
+      setAddingToSquad(false);
     }
   };
 
@@ -606,30 +614,37 @@ export const Teams: React.FC = () => {
                   background: 'rgba(255,255,255,0.03)',
                   borderRadius: '8px',
                   marginBottom: '1.25rem',
+                  flexWrap: 'wrap',
                 }}
               >
-                <div style={{ flex: 1 }}>
-                  <select
-                    className="form-select"
-                    value={selectedPlayerToAdd}
-                    onChange={(e) => setSelectedPlayerToAdd(e.target.value)}
-                  >
-                    <option value="">-- Select player to add to squad --</option>
-                    {allPlayers
+                <div style={{ flex: 1, minWidth: '240px' }}>
+                  <MultiSelectDropdown
+                    options={allPlayers
                       .filter((p) => !selectedTeamDetail.players.some((tp) => String(tp.id) === String(p.id)))
-                      .map((p) => (
-                        <option key={String(p.id)} value={p.id}>
-                          {p.fullName} ({p.playerCategory})
-                        </option>
-                      ))}
-                  </select>
+                      .map((p) => ({
+                        id: p.id,
+                        label: p.fullName,
+                        badge: p.playerCategory,
+                      }))}
+                    selectedIds={selectedPlayersToAdd}
+                    onChange={setSelectedPlayersToAdd}
+                    placeholder="-- Select players to add to squad --"
+                    searchPlaceholder="Search player by name or role..."
+                    disabled={addingToSquad}
+                  />
                 </div>
                 <button
                   className="btn btn-primary"
                   onClick={handleAddPlayerToTeam}
-                  disabled={!selectedPlayerToAdd || selectedPlayerToAdd === '0' || selectedPlayerToAdd === 0}
+                  disabled={selectedPlayersToAdd.length === 0 || addingToSquad}
+                  style={{ whiteSpace: 'nowrap', minWidth: '140px' }}
                 >
-                  <UserPlus size={16} /> Add to Squad
+                  <UserPlus size={16} />{' '}
+                  {addingToSquad
+                    ? 'Adding...'
+                    : selectedPlayersToAdd.length > 0
+                    ? `Add (${selectedPlayersToAdd.length}) to Squad`
+                    : 'Add to Squad'}
                 </button>
               </div>
             )}
