@@ -3171,7 +3171,7 @@ export const Matches: React.FC<MatchesProps> = ({
                                 <td style={{ color: bp.isOut ? '#ef4444' : '#10b981', fontSize: '0.8rem' }}>
                                   {bp.isOut ? (bp.dismissalType || 'Out') : 'not out'}
                                 </td>
-                                <td style={{ fontWeight: 800, color: '#fff' }}>{bp.runs}</td>
+                                <td style={{ fontWeight: 800, color: 'var(--text-primary)' }}>{bp.runs}</td>
                                 <td>{bp.ballsFaced}</td>
                                 <td>{bp.fours}</td>
                                 <td>{bp.sixes}</td>
@@ -3284,7 +3284,7 @@ export const Matches: React.FC<MatchesProps> = ({
                     className="form-select"
                     value={activeLiveScore.calculatedResult?.winningTeamId ?? outcomeWinningTeamId}
                     disabled={true}
-                    style={{ background: 'rgba(255,255,255,0.04)', color: '#fff', cursor: 'not-allowed', fontWeight: 600 }}
+                    style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--text-primary)', cursor: 'not-allowed', fontWeight: 600 }}
                   >
                     <option value={0}>-- Draw / Tied / In Progress --</option>
                     <option value={activeLiveScore.match.team1Id}>{activeLiveScore.match.team1Name}</option>
@@ -3348,7 +3348,7 @@ export const Matches: React.FC<MatchesProps> = ({
                       {activeLiveScore.innings1 && (
                         <div style={{ background: 'rgba(255,255,255,0.03)', padding: '0.6rem 0.8rem', borderRadius: '6px' }}>
                           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>1st Innings (Batted First)</div>
-                          <div style={{ fontWeight: 700, color: '#fff' }}>{activeLiveScore.innings1.battingTeamName}</div>
+                          <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{activeLiveScore.innings1.battingTeamName}</div>
                           <div style={{ color: '#fbbf24', fontWeight: 800, marginTop: '0.2rem' }}>
                             {activeLiveScore.innings1.runs}/{activeLiveScore.innings1.wickets}{' '}
                             <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>
@@ -3360,7 +3360,7 @@ export const Matches: React.FC<MatchesProps> = ({
                       {activeLiveScore.innings2 && (
                         <div style={{ background: 'rgba(255,255,255,0.03)', padding: '0.6rem 0.8rem', borderRadius: '6px' }}>
                           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>2nd Innings (Chasing Team)</div>
-                          <div style={{ fontWeight: 700, color: '#fff' }}>{activeLiveScore.innings2.battingTeamName}</div>
+                          <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{activeLiveScore.innings2.battingTeamName}</div>
                           <div style={{ color: '#fbbf24', fontWeight: 800, marginTop: '0.2rem' }}>
                             {activeLiveScore.innings2.runs}/{activeLiveScore.innings2.wickets}{' '}
                             <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>
@@ -3407,7 +3407,7 @@ export const Matches: React.FC<MatchesProps> = ({
                       <div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
                           <div>
-                            <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#fff', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                               🏆 {activeLiveScore.momDetails?.selectedPlayerName || activeLiveScore.match.momPlayerName}
                             </div>
                             <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
