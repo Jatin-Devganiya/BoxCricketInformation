@@ -138,16 +138,18 @@ export function generateInitialSeed(): InitialSeedDataset {
 
   // 6. Players (Active 10 players seeded)
   const players: DbPlayer[] = [
-    { id: 1, firstName: 'Rohit', lastName: 'Sharma', playerCategory: 'Batsman', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
-    { id: 2, firstName: 'Virat', lastName: 'Kohli', playerCategory: 'Batsman', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
-    { id: 3, firstName: 'Jasprit', lastName: 'Bumrah', playerCategory: 'Bowler', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
-    { id: 4, firstName: 'Hardik', lastName: 'Pandya', playerCategory: 'Batsman', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
-    { id: 5, firstName: 'Ravindra', lastName: 'Jadeja', playerCategory: 'Bowler', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
-    { id: 6, firstName: 'KL', lastName: 'Rahul', playerCategory: 'Batsman', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
-    { id: 7, firstName: 'Mohammed', lastName: 'Shami', playerCategory: 'Bowler', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
-    { id: 8, firstName: 'Suryakumar', lastName: 'Yadav', playerCategory: 'Batsman', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
-    { id: 9, firstName: 'Rishabh', lastName: 'Pant', playerCategory: 'Batsman', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
-    { id: 10, firstName: 'Kuldeep', lastName: 'Yadav', playerCategory: 'Bowler', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
+    { id: 1, firstName: 'Sunil', lastName: 'Unagar', playerCategory: 'Batsman', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
+    { id: 2, firstName: 'Rahul', lastName: 'Unagar', playerCategory: 'Batsman', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
+    { id: 3, firstName: 'Bharat', lastName: 'Unagar', playerCategory: 'Bowler', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
+    { id: 4, firstName: 'Haresh', lastName: 'Unagar', playerCategory: 'Batsman', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
+    { id: 5, firstName: 'Pradip', lastName: 'Vyas', playerCategory: 'Bowler', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
+    { id: 6, firstName: 'Jatin', lastName: 'Devganiya', playerCategory: 'Batsman', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
+    { id: 7, firstName: 'Parth', lastName: 'Jikadra', playerCategory: 'Bowler', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
+    { id: 8, firstName: 'Mehul', lastName: 'Kaklotar', playerCategory: 'Batsman', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
+    { id: 9, firstName: 'Jatin', lastName: 'Kalsariya', playerCategory: 'Batsman', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
+    { id: 10, firstName: 'Rahul', lastName: 'T', playerCategory: 'Bowler', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
+    { id: 11, firstName: 'Kirtan', lastName: 'Jikadra', playerCategory: 'Bowler', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
+    { id: 12, firstName: 'Nayan', lastName: 'V', playerCategory: 'Bowler', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
   ];
 
   // 7. TeamPlayers (Starts fresh — assigned from website)
