@@ -295,6 +295,14 @@ const httpLiveScoringApi = {
     const { data } = await api.post<LiveScore>(`/matches/${matchId}/innings/${inningsId}/replace-bowler-in-over`, { newBowlerPlayerId });
     return data;
   },
+  declareBatsman: async (matchId: number, inningsId: number, declaredPlayerId: number, newBatsmanPlayerId?: number | null): Promise<LiveScore> => {
+    const { data } = await api.post<LiveScore>(`/matches/${matchId}/innings/${inningsId}/declare-batsman`, { declaredPlayerId, newBatsmanPlayerId });
+    return data;
+  },
+  swapStrike: async (matchId: number, inningsId: number): Promise<LiveScore> => {
+    const { data } = await api.post<LiveScore>(`/matches/${matchId}/innings/${inningsId}/swap-strike`);
+    return data;
+  },
 };
 
 // Swappable Unified Exports:

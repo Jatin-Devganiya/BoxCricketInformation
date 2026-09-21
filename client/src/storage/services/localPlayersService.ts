@@ -21,6 +21,56 @@ const bowlingRepo = new LocalStorageRepository<DbMatchBowlingPerformance>(STORAG
 const ballEventRepo = new LocalStorageRepository<DbBallEvent>(STORAGE_KEYS.BALL_EVENTS);
 const matchRepo = new LocalStorageRepository<DbMatch>(STORAGE_KEYS.MATCHES);
 
+function computePlayerRanks(
+  allPlayers: DbPlayer[],
+  battingRecords: DbMatchBattingPerformance[],
+  bowlingRecords: DbMatchBowlingPerformance[]
+) {
+  // Aggregate runs & wickets across all players
+  const playerRunsMap = new Map<string, number>();
+  const playerWicketsMap = new Map<string, number>();
+
+  for (const p of allPlayers) {
+    const pId = String(p.id);
+    const pBatting = battingRecords.filter((b) => String(b.playerId) === pId);
+    const pBowling = bowlingRecords.filter((b) => String(b.playerId) === pId);
+    playerRunsMap.set(pId, pBatting.reduce((acc, b) => acc + (b.runs || 0), 0));
+    playerWicketsMap.set(pId, pBowling.reduce((acc, b) => acc + (b.wickets || 0), 0));
+  }
+
+  // Dense ranking for batting (players with runs > 0)
+  const battingRanks = new Map<string, number>();
+  let currentBatRank = 0;
+  let prevRuns = -1;
+  const sortedBatters = Array.from(playerRunsMap.entries())
+    .filter(([_, runs]) => runs > 0)
+    .sort((a, b) => b[1] - a[1]);
+  for (const [pId, runs] of sortedBatters) {
+    if (runs !== prevRuns) {
+      currentBatRank++;
+      prevRuns = runs;
+    }
+    battingRanks.set(pId, currentBatRank);
+  }
+
+  // Dense ranking for bowling (players with wickets > 0)
+  const bowlingRanks = new Map<string, number>();
+  let currentBowlRank = 0;
+  let prevWickets = -1;
+  const sortedBowlers = Array.from(playerWicketsMap.entries())
+    .filter(([_, wickets]) => wickets > 0)
+    .sort((a, b) => b[1] - a[1]);
+  for (const [pId, wickets] of sortedBowlers) {
+    if (wickets !== prevWickets) {
+      currentBowlRank++;
+      prevWickets = wickets;
+    }
+    bowlingRanks.set(pId, currentBowlRank);
+  }
+
+  return { battingRanks, bowlingRanks };
+}
+
 export const localPlayersService = {
   getAll: async (params?: { search?: string; category?: string; status?: string }): Promise<Player[]> => {
     let list = playerRepo.getAll();
@@ -46,6 +96,10 @@ export const localPlayersService = {
     const matches = matchRepo.getAll();
     const teams = teamRepo.getAll();
     const teamPlayers = teamPlayerRepo.getAll();
+
+    // Compute global batting and bowling ranks across all active players in localStorage
+    const allPlayersList = playerRepo.getAll();
+    const { battingRanks, bowlingRanks } = computePlayerRanks(allPlayersList, battingRecords, bowlingRecords);
 
     // Map each player to full presentation model
     return list.map((p) => {
@@ -75,8 +129,8 @@ export const localPlayersService = {
         totalRuns,
         totalWickets,
         manOfTheMatchCount: momCount,
-        battingRank: null,
-        bowlingRank: null,
+        battingRank: battingRanks.get(String(p.id)) ?? null,
+        bowlingRank: bowlingRanks.get(String(p.id)) ?? null,
         createdByUserId: p.createdByUserId ? (p.createdByUserId as any) : undefined,
         createdAt: p.createdAt,
       };
@@ -98,6 +152,11 @@ export const localPlayersService = {
       if (t) currentTeamName = t.name;
     }
 
+    const allPlayersList = playerRepo.getAll();
+    const allBatting = battingRepo.getAll();
+    const allBowling = bowlingRepo.getAll();
+    const { battingRanks, bowlingRanks } = computePlayerRanks(allPlayersList, allBatting, allBowling);
+
     return {
       id: p.id as any,
       firstName: p.firstName,
@@ -109,6 +168,8 @@ export const localPlayersService = {
       currentTeamName,
       totalRuns: battingRecords.reduce((acc, b) => acc + (b.runs || 0), 0),
       totalWickets: bowlingRecords.reduce((acc, b) => acc + (b.wickets || 0), 0),
+      battingRank: battingRanks.get(String(p.id)) ?? null,
+      bowlingRank: bowlingRanks.get(String(p.id)) ?? null,
       manOfTheMatchCount: matches.length,
       createdAt: p.createdAt,
     };

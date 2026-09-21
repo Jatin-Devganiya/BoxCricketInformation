@@ -18,6 +18,8 @@ public interface ILiveScoringService
     Task<EligibleBowlersResponseDto?> GetEligibleBowlersAsync(int matchId, int inningsId);
     Task<LiveScoreDto?> ChangeSelectedBowlerAsync(int matchId, int inningsId, ChangeBowlerRequest request);
     Task<LiveScoreDto?> ReplaceBowlerForRemainingOverAsync(int matchId, int inningsId, ReplaceBowlerRequest request);
+    Task<LiveScoreDto?> DeclareBatsmanAsync(int matchId, int inningsId, DeclareBatsmanRequest request);
+    Task<LiveScoreDto?> SwapStrikeAsync(int matchId, int inningsId);
 }
 
 public class LiveScoringService : ILiveScoringService
@@ -181,19 +183,18 @@ public class LiveScoringService : ILiveScoringService
 
         var momDetails = ManOfTheMatchCalculator.Calculate(match, allMatchPlayers);
 
-        matchDto.MOMPlayerId = match.MOMPlayerId ?? momDetails.SelectedPlayerId;
-        matchDto.MOMPlayerName = match.MOMPlayer != null
-            ? $"{match.MOMPlayer.FirstName} {match.MOMPlayer.LastName}"
-            : momDetails.SelectedPlayerName;
-        matchDto.MOMScore = match.MOMScore ?? (momDetails.SelectedPlayerId.HasValue ? momDetails.TotalScore : null);
-
-        if (match.Status == "Completed" && !match.MOMPlayerId.HasValue && momDetails.SelectedPlayerId.HasValue)
+        if (match.Status == "Completed" && momDetails.SelectedPlayerId.HasValue && match.MOMPlayerId != momDetails.SelectedPlayerId)
         {
             match.MOMPlayerId = momDetails.SelectedPlayerId.Value;
             match.MOMScore = momDetails.TotalScore;
             match.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
         }
+
+        matchDto.MOMPlayerId = match.MOMPlayerId ?? momDetails.SelectedPlayerId;
+        matchDto.MOMPlayerName = momDetails.SelectedPlayerName
+            ?? (match.MOMPlayer != null ? $"{match.MOMPlayer.FirstName} {match.MOMPlayer.LastName}" : null);
+        matchDto.MOMScore = match.MOMScore ?? (momDetails.SelectedPlayerId.HasValue ? momDetails.TotalScore : null);
 
         var calculatedResult = MatchResultCalculator.Calculate(match);
         if (calculatedResult.IsComplete || string.IsNullOrWhiteSpace(matchDto.Result))
@@ -736,7 +737,7 @@ public class LiveScoringService : ILiveScoringService
                 break;
             case "LegBye":
                 batRuns = 0;
-                extraRuns = req.Runs > 0 ? req.Runs : 1;
+                extraRuns = req.Runs >= 0 ? req.Runs : (req.ExtraRuns >= 0 ? req.ExtraRuns : 0);
                 extraType = "LegBye";
                 isLegalBall = true;
                 break;
@@ -1740,6 +1741,103 @@ public class LiveScoringService : ILiveScoringService
 
         // Auto-synchronize bowling performances so both bowlers' stats are up to date
         await SyncPerformancesFromEventsAsync(inn.Id);
+
+        return await GetLiveScoreAsync(matchId);
+    }
+
+    public async Task<LiveScoreDto?> DeclareBatsmanAsync(int matchId, int inningsId, DeclareBatsmanRequest req)
+    {
+        var match = await _context.Matches.Include(m => m.Series).FirstOrDefaultAsync(m => m.Id == matchId);
+        if (match == null) return null;
+        EnsureLiveScoringAllowed(match);
+
+        var inn = await _context.MatchInnings
+            .Include(i => i.BallEvents)
+            .Include(i => i.BattingPerformances)
+            .FirstOrDefaultAsync(i => i.Id == inningsId && i.MatchId == matchId);
+        if (inn == null) return null;
+
+        bool isStriker = inn.CurrentStrikerId == req.DeclaredPlayerId;
+        bool isNonStriker = inn.CurrentNonStrikerId == req.DeclaredPlayerId;
+        if (!isStriker && !isNonStriker)
+        {
+            throw new InvalidOperationException("Declared player is not currently at the crease.");
+        }
+
+        bool hasNewBatsman = req.NewBatsmanPlayerId.HasValue && req.NewBatsmanPlayerId.Value > 0;
+        if (hasNewBatsman)
+        {
+            if (inn.CurrentStrikerId == req.NewBatsmanPlayerId || inn.CurrentNonStrikerId == req.NewBatsmanPlayerId)
+            {
+                throw new InvalidOperationException("Selected batsman is already currently batting.");
+            }
+            bool alreadyOut = await _context.BallEvents.AnyAsync(b => b.InningsId == inn.Id && b.IsWicket && b.DismissedPlayerId == req.NewBatsmanPlayerId);
+            if (alreadyOut)
+            {
+                throw new InvalidOperationException("Selected batsman has already been dismissed or declared.");
+            }
+        }
+
+        int currentOverNumber = (inn.Balls / 6) + 1;
+        var existingOverEvents = inn.BallEvents.Where(b => b.OverNumber == currentOverNumber).ToList();
+        int deliveryNumberInOver = existingOverEvents.Count + 1;
+
+        var declareEvent = new BallEvent
+        {
+            MatchId = match.Id,
+            InningsId = inn.Id,
+            OverNumber = currentOverNumber,
+            DeliveryNumber = deliveryNumberInOver,
+            BallNumber = inn.Balls % 6,
+            BowlerPlayerId = inn.CurrentBowlerId ?? 0,
+            StrikerPlayerId = inn.CurrentStrikerId ?? 0,
+            NonStrikerPlayerId = inn.CurrentNonStrikerId ?? 0,
+            BatRuns = 0,
+            ExtraRuns = 0,
+            ExtraType = "None",
+            EventType = "Wicket",
+            IsLegalBall = false,
+            IsWicket = true,
+            WicketType = "Declared",
+            DismissedPlayerId = req.DeclaredPlayerId,
+            BowlerCreditedWicket = false,
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.BallEvents.Add(declareEvent);
+
+        inn.Wickets += 1;
+        if (isStriker)
+        {
+            inn.CurrentStrikerId = hasNewBatsman ? req.NewBatsmanPlayerId : null;
+        }
+        else
+        {
+            inn.CurrentNonStrikerId = hasNewBatsman ? req.NewBatsmanPlayerId : null;
+        }
+
+        match.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        await SyncPerformancesFromEventsAsync(inn.Id);
+        await CheckInningsAndMatchCompletionAsync(match, inn);
+        await _context.SaveChangesAsync();
+
+        return await GetLiveScoreAsync(matchId);
+    }
+
+    public async Task<LiveScoreDto?> SwapStrikeAsync(int matchId, int inningsId)
+    {
+        var match = await _context.Matches.FirstOrDefaultAsync(m => m.Id == matchId);
+        if (match == null) return null;
+        EnsureLiveScoringAllowed(match);
+
+        var inn = await _context.MatchInnings.FirstOrDefaultAsync(i => i.Id == inningsId && i.MatchId == matchId);
+        if (inn == null) return null;
+
+        var temp = inn.CurrentStrikerId;
+        inn.CurrentStrikerId = inn.CurrentNonStrikerId;
+        inn.CurrentNonStrikerId = temp;
+        match.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
 
         return await GetLiveScoreAsync(matchId);
     }

@@ -411,6 +411,12 @@ public class SelectNewBatsmanRequest
     public int NewBatsmanPlayerId { get; set; }
 }
 
+public class DeclareBatsmanRequest
+{
+    public int DeclaredPlayerId { get; set; }
+    public int? NewBatsmanPlayerId { get; set; }
+}
+
 public class NextOverRequest
 {
     public int NextBowlerPlayerId { get; set; }

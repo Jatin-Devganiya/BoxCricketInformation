@@ -9,17 +9,20 @@ import {
   DbMatchBowlingPerformance,
   DbBallEvent,
   DbUser,
+  DbTeamPlayer,
 } from '../dbSchema';
 import { LocalStorageRepository } from '../LocalStorageRepository';
 import { LocalStorageDataStore } from '../LocalStorageDataStore';
 import { Match, Scorecard, InningsScorecard, BattingRecord, BowlingRecord } from '../../types';
 import { toCricketOvers, calculateStrikeRate, calculateEconomyRate } from '../cricketCalculations';
 import { canAddMatchesToSeries, getAllowedMatchTransitions } from '../../utils/statusRules';
+import { calculateManOfTheMatch } from '../manOfTheMatchCalculator';
 
 const matchRepo = new LocalStorageRepository<DbMatch>(STORAGE_KEYS.MATCHES);
 const seriesRepo = new LocalStorageRepository<DbSeries>(STORAGE_KEYS.SERIES);
 const teamRepo = new LocalStorageRepository<DbTeam>(STORAGE_KEYS.TEAMS);
 const playerRepo = new LocalStorageRepository<DbPlayer>(STORAGE_KEYS.PLAYERS);
+const teamPlayerRepo = new LocalStorageRepository<DbTeamPlayer>(STORAGE_KEYS.TEAM_PLAYERS);
 const inningsRepo = new LocalStorageRepository<DbMatchInnings>(STORAGE_KEYS.MATCH_INNINGS);
 const battingRepo = new LocalStorageRepository<DbMatchBattingPerformance>(STORAGE_KEYS.MATCH_BATTING_PERFORMANCES);
 const bowlingRepo = new LocalStorageRepository<DbMatchBowlingPerformance>(STORAGE_KEYS.MATCH_BOWLING_PERFORMANCES);
@@ -63,12 +66,36 @@ export const localMatchesService = {
       return a.scheduledDate.localeCompare(b.scheduledDate);
     });
 
+    const teamPlayers = teamPlayerRepo.getAll();
+    const inningsAll = inningsRepo.getAll();
+    const battingAll = battingRepo.getAll();
+    const bowlingAll = bowlingRepo.getAll();
+    const teamsMap = new Map<string, DbTeam>();
+    for (const t of teams) teamsMap.set(String(t.id), t);
+
     return list.map((m) => {
       const s = series.find((sr) => String(sr.id) === String(m.seriesId));
       const t1 = teams.find((tm) => String(tm.id) === String(m.team1Id));
       const t2 = teams.find((tm) => String(tm.id) === String(m.team2Id));
       const winTeam = m.winningTeamId ? teams.find((tm) => String(tm.id) === String(m.winningTeamId)) : null;
-      const mom = m.momPlayerId ? players.find((p) => String(p.id) === String(m.momPlayerId)) : null;
+
+      let effectiveMomPlayerId = m.momPlayerId;
+      let effectiveMomScore = m.momScore;
+      if (m.status === 'Completed') {
+        const matchInns = inningsAll.filter((i) => String(i.matchId) === String(m.id));
+        if (matchInns.length > 0) {
+          const mBatting = battingAll.filter((b) => matchInns.some((i) => String(i.id) === String(b.matchInningsId)));
+          const mBowling = bowlingAll.filter((b) => matchInns.some((i) => String(i.id) === String(b.matchInningsId)));
+          const momRes = calculateManOfTheMatch(m, players, teamPlayers, teamsMap, mBatting, mBowling);
+          if (momRes.selectedPlayerId && String(momRes.selectedPlayerId) !== String(effectiveMomPlayerId)) {
+            effectiveMomPlayerId = momRes.selectedPlayerId;
+            effectiveMomScore = momRes.totalScore;
+            matchRepo.update(m.id, { momPlayerId: momRes.selectedPlayerId, momScore: momRes.totalScore });
+          }
+        }
+      }
+
+      const mom = effectiveMomPlayerId ? players.find((p) => String(p.id) === String(effectiveMomPlayerId)) : null;
       const creator = users.find((u) => String(u.id) === String(m.createdByUserId));
 
       return {
@@ -92,9 +119,9 @@ export const localMatchesService = {
         result: m.result || undefined,
         resultType: m.resultType || undefined,
         winningMargin: m.winningMargin || undefined,
-        momPlayerId: m.momPlayerId ? (m.momPlayerId as any) : undefined,
+        momPlayerId: effectiveMomPlayerId ? (effectiveMomPlayerId as any) : undefined,
         momPlayerName: mom ? `${mom.firstName} ${mom.lastName}` : undefined,
-        momScore: m.momScore !== undefined ? m.momScore : undefined,
+        momScore: effectiveMomScore !== undefined ? effectiveMomScore : undefined,
         createdByUserId: m.createdByUserId ? (m.createdByUserId as any) : undefined,
         createdByUsername: creator ? creator.username : undefined,
       };
@@ -109,7 +136,29 @@ export const localMatchesService = {
     const t1 = teamRepo.getById(m.team1Id);
     const t2 = teamRepo.getById(m.team2Id);
     const winTeam = m.winningTeamId ? teamRepo.getById(m.winningTeamId) : null;
-    const mom = m.momPlayerId ? playerRepo.getById(m.momPlayerId) : null;
+
+    let effectiveMomPlayerId = m.momPlayerId;
+    let effectiveMomScore = m.momScore;
+    if (m.status === 'Completed') {
+      const matchInns = inningsRepo.find((i) => String(i.matchId) === String(m.id));
+      if (matchInns.length > 0) {
+        const players = playerRepo.getAll();
+        const teamPlayers = teamPlayerRepo.getAll();
+        const teams = teamRepo.getAll();
+        const teamsMap = new Map<string, DbTeam>();
+        for (const t of teams) teamsMap.set(String(t.id), t);
+        const mBatting = battingRepo.find((b) => matchInns.some((i) => String(i.id) === String(b.matchInningsId)));
+        const mBowling = bowlingRepo.find((b) => matchInns.some((i) => String(i.id) === String(b.matchInningsId)));
+        const momRes = calculateManOfTheMatch(m, players, teamPlayers, teamsMap, mBatting, mBowling);
+        if (momRes.selectedPlayerId && String(momRes.selectedPlayerId) !== String(effectiveMomPlayerId)) {
+          effectiveMomPlayerId = momRes.selectedPlayerId;
+          effectiveMomScore = momRes.totalScore;
+          matchRepo.update(m.id, { momPlayerId: momRes.selectedPlayerId, momScore: momRes.totalScore });
+        }
+      }
+    }
+
+    const mom = effectiveMomPlayerId ? playerRepo.getById(effectiveMomPlayerId) : null;
     const creator = m.createdByUserId ? userRepo.getById(m.createdByUserId) : null;
 
     return {
@@ -133,9 +182,9 @@ export const localMatchesService = {
       result: m.result || undefined,
       resultType: m.resultType || undefined,
       winningMargin: m.winningMargin || undefined,
-      momPlayerId: m.momPlayerId ? (m.momPlayerId as any) : undefined,
+      momPlayerId: effectiveMomPlayerId ? (effectiveMomPlayerId as any) : undefined,
       momPlayerName: mom ? `${mom.firstName} ${mom.lastName}` : undefined,
-      momScore: m.momScore !== undefined ? m.momScore : undefined,
+      momScore: effectiveMomScore !== undefined ? effectiveMomScore : undefined,
       createdByUserId: m.createdByUserId ? (m.createdByUserId as any) : undefined,
       createdByUsername: creator ? creator.username : undefined,
     };

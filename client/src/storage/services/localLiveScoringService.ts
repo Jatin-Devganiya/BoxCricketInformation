@@ -384,6 +384,23 @@ export const localLiveScoringService = {
     const matchBowling = allBowling.filter((b) => inningsList.some((i) => String(i.id) === String(b.matchInningsId)));
     const momDetails = calculateManOfTheMatch(dbMatch, players, teamPlayers, teamsMap, matchBatting, matchBowling);
 
+    // Authoritative synchronization: if match is Completed and momDetails has selected player,
+    // sync dbMatch and match so all views (console, awards, match card) show the identical winner
+    if (dbMatch.status === 'Completed' && momDetails.selectedPlayerId) {
+      if (String(dbMatch.momPlayerId) !== String(momDetails.selectedPlayerId)) {
+        matchRepo.update(dbMatch.id, {
+          momPlayerId: momDetails.selectedPlayerId,
+          momScore: momDetails.totalScore,
+          updatedAt: new Date().toISOString(),
+        });
+        match.momPlayerId = momDetails.selectedPlayerId as any;
+        match.momPlayerName = momDetails.selectedPlayerName || undefined;
+        match.momScore = momDetails.totalScore;
+      }
+    } else if (momDetails.selectedPlayerName && !match.momPlayerName) {
+      match.momPlayerName = momDetails.selectedPlayerName;
+    }
+
     return {
       match,
       activeInningsNumber,
@@ -494,7 +511,7 @@ export const localLiveScoringService = {
         break;
       case 'LegBye':
         batRuns = 0;
-        extraRuns = (payload.runs || 0) > 0 ? payload.runs! : 1;
+        extraRuns = (payload.runs !== undefined && payload.runs !== null) ? payload.runs : ((payload.extraRuns !== undefined && payload.extraRuns !== null) ? payload.extraRuns : 0);
         extraType = 'LegBye';
         isLegalBall = true;
         break;
@@ -580,9 +597,9 @@ export const localLiveScoringService = {
       updatedAt: now,
     });
 
-    // Check completion & sync performances
-    await localLiveScoringService.checkInningsAndMatchCompletion(match, inningsRepo.getById(inn.id)!);
+    // Sync performances & check completion
     await localLiveScoringService.syncPerformancesFromEvents(inn.id);
+    await localLiveScoringService.checkInningsAndMatchCompletion(match, inningsRepo.getById(inn.id)!);
 
     LocalStorageDataStore.rebuildIndexes();
     return await localLiveScoringService.getLiveScore(matchId);
@@ -697,8 +714,8 @@ export const localLiveScoringService = {
       updatedAt: now,
     });
 
-    await localLiveScoringService.checkInningsAndMatchCompletion(match, inningsRepo.getById(inn.id)!);
     await localLiveScoringService.syncPerformancesFromEvents(inn.id);
+    await localLiveScoringService.checkInningsAndMatchCompletion(match, inningsRepo.getById(inn.id)!);
 
     LocalStorageDataStore.rebuildIndexes();
     return await localLiveScoringService.getLiveScore(matchId);
@@ -781,8 +798,16 @@ export const localLiveScoringService = {
     const inn = inningsRepo.getById(inningsId);
     if (!inn) throw new Error('Innings not found');
 
+    const match = matchRepo.getById(matchId);
+    if (!match) throw new Error('Match not found');
+
     const now = new Date().toISOString();
     inningsRepo.update(inn.id, { status: 'Completed', updatedAt: now });
+    await localLiveScoringService.syncPerformancesFromEvents(inn.id);
+
+    if (inn.inningsNumber === 2) {
+      await localLiveScoringService.checkInningsAndMatchCompletion(match, inningsRepo.getById(inn.id)!);
+    }
 
     LocalStorageDataStore.rebuildIndexes();
     return await localLiveScoringService.getLiveScore(matchId);
@@ -801,13 +826,46 @@ export const localLiveScoringService = {
       if (inn.status !== 'Completed') {
         inningsRepo.update(inn.id, { status: 'Completed', updatedAt: now });
       }
+      await localLiveScoringService.syncPerformancesFromEvents(inn.id);
     }
+
+    const teams = teamRepo.getAll();
+    const teamsMap = new Map<string, DbTeam>();
+    for (const t of teams) teamsMap.set(String(t.id), t);
+
+    const calcResult = calculateMatchResult(match, inningsList, teamsMap);
+    const resolvedWinningTeamId = payload.winningTeamId || calcResult.winningTeamId || match.winningTeamId;
+    const resolvedResult = payload.result || calcResult.resultDescription || match.result;
+
+    const updatedMatch: DbMatch = {
+      ...match,
+      status: 'Completed',
+      winningTeamId: resolvedWinningTeamId,
+      result: resolvedResult,
+      resultType: calcResult.resultType || match.resultType,
+      winningMargin: calcResult.winningMargin || match.winningMargin,
+    };
+
+    const players = playerRepo.getAll();
+    const teamPlayers = teamPlayerRepo.getAll();
+    const matchBatting = battingRepo.find((b) => inningsList.some((i) => String(i.id) === String(b.matchInningsId)));
+    const matchBowling = bowlingRepo.find((b) => inningsList.some((i) => String(i.id) === String(b.matchInningsId)));
+    const momResult = calculateManOfTheMatch(updatedMatch, players, teamPlayers, teamsMap, matchBatting, matchBowling);
+
+    const finalMomPlayerId = payload.momPlayerId || momResult.selectedPlayerId || match.momPlayerId;
+    const finalMomScore =
+      momResult.selectedPlayerId && String(finalMomPlayerId) === String(momResult.selectedPlayerId)
+        ? momResult.totalScore
+        : match.momScore;
 
     matchRepo.update(matchId, {
       status: 'Completed',
-      winningTeamId: payload.winningTeamId || match.winningTeamId,
-      result: payload.result || match.result,
-      momPlayerId: payload.momPlayerId || match.momPlayerId,
+      winningTeamId: resolvedWinningTeamId,
+      result: resolvedResult,
+      resultType: calcResult.resultType || match.resultType,
+      winningMargin: calcResult.winningMargin || match.winningMargin,
+      momPlayerId: finalMomPlayerId,
+      momScore: finalMomScore,
       updatedAt: now,
     });
 
@@ -942,6 +1000,124 @@ export const localLiveScoringService = {
     return await localLiveScoringService.getLiveScore(matchId);
   },
 
+  declareBatsman: async (
+    matchId: number | string,
+    inningsId: number | string,
+    declaredPlayerId: number | string,
+    newBatsmanPlayerId?: number | string | null
+  ): Promise<LiveScore> => {
+    const inn = inningsRepo.getById(inningsId);
+    if (!inn) throw new Error('Innings not found');
+    const match = matchRepo.getById(matchId);
+    if (!match) throw new Error('Match not found');
+
+    const isStriker = String(inn.currentStrikerId) === String(declaredPlayerId);
+    const isNonStriker = String(inn.currentNonStrikerId) === String(declaredPlayerId);
+    if (!isStriker && !isNonStriker) {
+      throw new Error('Declared player is not currently at the crease.');
+    }
+
+    const hasNewBatsman = newBatsmanPlayerId != null && Number(newBatsmanPlayerId) > 0;
+    if (hasNewBatsman) {
+      if (
+        String(inn.currentStrikerId) === String(newBatsmanPlayerId) ||
+        String(inn.currentNonStrikerId) === String(newBatsmanPlayerId)
+      ) {
+        throw new Error('Selected batsman is already currently batting.');
+      }
+      const alreadyDismissed = ballEventRepo.exists(
+        (b) => String(b.inningsId) === String(inn.id) && b.isWicket && String(b.dismissedPlayerId) === String(newBatsmanPlayerId)
+      );
+      if (alreadyDismissed) {
+        throw new Error('Selected batsman has already been dismissed or declared.');
+      }
+    }
+
+    const now = new Date().toISOString();
+    const currentOverNumber = Math.floor((inn.balls || 0) / 6) + 1;
+    const existingOverEvents = ballEventRepo.find((b) => String(b.inningsId) === String(inn.id) && b.overNumber === currentOverNumber);
+    const deliveryNumberInOver = existingOverEvents.length + 1;
+
+    // 1. Record ball event for declaration (isLegalBall: false so over does not advance)
+    const ballEvent = ballEventRepo.create({
+      matchId,
+      inningsId: inn.id,
+      overNumber: currentOverNumber,
+      ballNumber: (inn.balls || 0) % 6,
+      deliveryNumber: deliveryNumberInOver,
+      strikerPlayerId: inn.currentStrikerId || 0,
+      nonStrikerPlayerId: inn.currentNonStrikerId || 0,
+      bowlerPlayerId: inn.currentBowlerId || 0,
+      runs: 0,
+      batRuns: 0,
+      extraRuns: 0,
+      extraType: 'None',
+      eventType: 'Wicket',
+      isLegalBall: false,
+      isWicket: true,
+      wicketType: 'Declared',
+      dismissedPlayerId: declaredPlayerId,
+      bowlerCreditedWicket: false,
+      createdAt: now,
+    });
+
+    // 2. Record in dismissals repository
+    dismissalRepo.create({
+      matchId,
+      inningsId: inn.id,
+      ballEventId: ballEvent.id,
+      dismissedPlayerId: declaredPlayerId,
+      wicketType: 'Declared',
+      bowlerId: inn.currentBowlerId || 0,
+      fielderId: null,
+      catcherId: null,
+      stumpingPlayerId: null,
+      runOutFielderId: null,
+      createdAt: now,
+    });
+
+    // 3. Update team wickets and crease
+    const newWickets = (inn.wickets || 0) + 1;
+    let nextStrikerId = inn.currentStrikerId;
+    let nextNonStrikerId = inn.currentNonStrikerId;
+    if (isStriker) {
+      nextStrikerId = hasNewBatsman ? newBatsmanPlayerId : null;
+    } else {
+      nextNonStrikerId = hasNewBatsman ? newBatsmanPlayerId : null;
+    }
+
+    inningsRepo.update(inn.id, {
+      wickets: newWickets,
+      currentStrikerId: nextStrikerId,
+      currentNonStrikerId: nextNonStrikerId,
+      updatedAt: now,
+    });
+
+    // 4. Sync batting performances
+    await localLiveScoringService.syncPerformancesFromEvents(inn.id);
+
+    // 5. Check completion
+    const updatedInn = inningsRepo.getById(inn.id)!;
+    await localLiveScoringService.checkInningsAndMatchCompletion(match, updatedInn);
+
+    LocalStorageDataStore.rebuildIndexes();
+    return await localLiveScoringService.getLiveScore(matchId);
+  },
+
+  swapStrike: async (matchId: number | string, inningsId: number | string): Promise<LiveScore> => {
+    const inn = inningsRepo.getById(inningsId);
+    if (!inn) throw new Error('Innings not found');
+    const prevStriker = inn.currentStrikerId;
+    const prevNonStriker = inn.currentNonStrikerId;
+    inningsRepo.update(inn.id, {
+      currentStrikerId: prevNonStriker,
+      currentNonStrikerId: prevStriker,
+      updatedAt: new Date().toISOString(),
+    });
+    LocalStorageDataStore.rebuildIndexes();
+    return await localLiveScoringService.getLiveScore(matchId);
+  },
+
   checkInningsAndMatchCompletion: async (match: DbMatch, inn: DbMatchInnings): Promise<void> => {
     const maxLegalBalls = (match.requiredOvers || 6) * 6;
     const now = new Date().toISOString();
@@ -966,6 +1142,9 @@ export const localLiveScoringService = {
         }
 
         if (matchFinished) {
+          // Authoritative sync: sync performances first so all runs, wickets, and balls are updated in repos
+          await localLiveScoringService.syncPerformancesFromEvents(inn.id);
+
           const allInnings = inningsRepo.find((i) => String(i.matchId) === String(match.id));
           const teams = teamRepo.getAll();
           const teamsMap = new Map<string, DbTeam>();
@@ -973,12 +1152,22 @@ export const localLiveScoringService = {
 
           const calcResult = calculateMatchResult(match, allInnings, teamsMap);
 
-          // Calculate MOM
+          // Construct updatedMatch containing the resolved winningTeamId so winning bonus is properly awarded
+          const updatedMatch: DbMatch = {
+            ...match,
+            status: 'Completed',
+            result: calcResult.resultDescription,
+            resultType: calcResult.resultType,
+            winningMargin: calcResult.winningMargin,
+            winningTeamId: calcResult.winningTeamId,
+          };
+
+          // Calculate MOM with updatedMatch (which now HAS winningTeamId!)
           const players = playerRepo.getAll();
           const teamPlayers = teamPlayerRepo.getAll();
           const matchBatting = battingRepo.find((b) => allInnings.some((i) => String(i.id) === String(b.matchInningsId)));
           const matchBowling = bowlingRepo.find((b) => allInnings.some((i) => String(i.id) === String(b.matchInningsId)));
-          const momResult = calculateManOfTheMatch(match, players, teamPlayers, teamsMap, matchBatting, matchBowling);
+          const momResult = calculateManOfTheMatch(updatedMatch, players, teamPlayers, teamsMap, matchBatting, matchBowling);
 
           matchRepo.update(match.id, {
             status: 'Completed',

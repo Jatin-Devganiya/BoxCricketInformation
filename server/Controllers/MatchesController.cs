@@ -717,4 +717,64 @@ public class MatchesController : ControllerBase
             return BadRequest(new { message = ex.Message });
         }
     }
+
+    [RequirePermission("LiveScoring")]
+    [HttpPost("{id}/innings/{inningsId}/declare-batsman")]
+    public async Task<IActionResult> DeclareBatsman(int id, int inningsId, [FromBody] DeclareBatsmanRequest req)
+    {
+        var match = await _context.Matches.Include(m => m.Series).FirstOrDefaultAsync(m => m.Id == id);
+        if (match == null) return NotFound(new { message = "Match not found." });
+
+        if (!CanModifyMatch(match))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Access denied. You can only live-score matches that you own." });
+        }
+
+        var scoringValidation = _statusValidationService.ValidateLiveScoringAllowed(match, match.Series);
+        if (!scoringValidation.IsValid)
+        {
+            return BadRequest(new { message = scoringValidation.ErrorMessage });
+        }
+
+        try
+        {
+            var result = await _liveScoringService.DeclareBatsmanAsync(id, inningsId, req);
+            if (result == null) return NotFound(new { message = "Match or Innings not found." });
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [RequirePermission("LiveScoring")]
+    [HttpPost("{id}/innings/{inningsId}/swap-strike")]
+    public async Task<IActionResult> SwapStrike(int id, int inningsId)
+    {
+        var match = await _context.Matches.Include(m => m.Series).FirstOrDefaultAsync(m => m.Id == id);
+        if (match == null) return NotFound(new { message = "Match not found." });
+
+        if (!CanModifyMatch(match))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Access denied. You can only live-score matches that you own." });
+        }
+
+        var scoringValidation = _statusValidationService.ValidateLiveScoringAllowed(match, match.Series);
+        if (!scoringValidation.IsValid)
+        {
+            return BadRequest(new { message = scoringValidation.ErrorMessage });
+        }
+
+        try
+        {
+            var result = await _liveScoringService.SwapStrikeAsync(id, inningsId);
+            if (result == null) return NotFound(new { message = "Match or Innings not found." });
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
 }

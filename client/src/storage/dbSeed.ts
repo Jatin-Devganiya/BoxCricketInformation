@@ -146,8 +146,8 @@ export function generateInitialSeed(): InitialSeedDataset {
     { id: 6, firstName: 'Jatin', lastName: 'Devganiya', playerCategory: 'Batsman', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
     { id: 7, firstName: 'Parth', lastName: 'Jikadra', playerCategory: 'Bowler', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
     { id: 8, firstName: 'Mehul', lastName: 'Kaklotar', playerCategory: 'Batsman', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
-    { id: 9, firstName: 'Jatin', lastName: 'Kalsariya', playerCategory: 'Batsman', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
-    { id: 10, firstName: 'Rahul', lastName: 'T', playerCategory: 'Bowler', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
+    { id: 9, firstName: 'Jatin', lastName: 'Piplaiya', playerCategory: 'Batsman', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
+    { id: 10, firstName: 'Rahul', lastName: 'Sarviya', playerCategory: 'Bowler', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
     { id: 11, firstName: 'Kirtan', lastName: 'Jikadra', playerCategory: 'Bowler', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
     { id: 12, firstName: 'Nayan', lastName: 'V', playerCategory: 'Bowler', status: 'Active', createdByUserId: 1, createdAt: now, updatedAt: now },
   ];

@@ -157,6 +157,11 @@ export const Matches: React.FC<MatchesProps> = ({
   const [newBatsmanModalOpen, setNewBatsmanModalOpen] = useState<boolean>(false);
   const [newBatsmanId, setNewBatsmanId] = useState<number>(0);
 
+  // Declare Batsman State
+  const [declareModalOpen, setDeclareModalOpen] = useState<boolean>(false);
+  const [declareBatsmanTarget, setDeclareBatsmanTarget] = useState<'striker' | 'nonStriker'>('striker');
+  const [declareIncomingBatsmanId, setDeclareIncomingBatsmanId] = useState<number>(0);
+
   // Next Bowler State
   const [nextBowlerModalOpen, setNextBowlerModalOpen] = useState<boolean>(false);
   const [nextBowlerId, setNextBowlerId] = useState<number>(0);
@@ -250,7 +255,7 @@ export const Matches: React.FC<MatchesProps> = ({
       const autoResult = live.calculatedResult?.resultDescription || live.match.result || '';
       setOutcomeWinningTeamId(autoWinner);
       setOutcomeResultText(autoResult);
-      setOutcomeMomPlayerId(live.match.momPlayerId || 0);
+      setOutcomeMomPlayerId(live.momDetails?.selectedPlayerId ?? live.match.momPlayerId ?? 0);
 
       // Pre-populate setup if active innings is not started yet
       const curr = live.activeInningsNumber === 1 ? live.innings1 : live.innings2;
@@ -950,6 +955,53 @@ export const Matches: React.FC<MatchesProps> = ({
     }
   };
 
+  const handleSwapStrike = async () => {
+    if (!activeLiveScore || !currentInnings || actionLoading) return;
+    if (!currentInnings.striker || !currentInnings.nonStriker) return;
+    try {
+      setActionLoading(true);
+      setScorecardError(null);
+      const updated = await liveScoringApi.swapStrike(activeLiveScore.match.id, currentInnings.id);
+      setActiveLiveScore(updated);
+      fetchMatches();
+    } catch (err: any) {
+      setScorecardError(err.response?.data?.message || 'Failed to swap strike.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeclareBatsman = async () => {
+    if (!activeLiveScore || !currentInnings || actionLoading) return;
+    const targetPlayerId =
+      declareBatsmanTarget === 'striker'
+        ? currentInnings.striker?.playerId
+        : currentInnings.nonStriker?.playerId;
+    if (!targetPlayerId) {
+      setScorecardError('No batsman selected to declare.');
+      return;
+    }
+
+    try {
+      setActionLoading(true);
+      setScorecardError(null);
+      const updated = await liveScoringApi.declareBatsman(
+        activeLiveScore.match.id,
+        currentInnings.id,
+        targetPlayerId,
+        declareIncomingBatsmanId > 0 ? declareIncomingBatsmanId : null
+      );
+      setActiveLiveScore(updated);
+      setDeclareModalOpen(false);
+      setDeclareIncomingBatsmanId(0);
+      fetchMatches();
+    } catch (err: any) {
+      setScorecardError(err.response?.data?.message || 'Failed to declare batsman.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleOpenChangeBowler = async (isMidOver: boolean) => {
     if (!activeLiveScore || !currentInnings) return;
     try {
@@ -1027,9 +1079,11 @@ export const Matches: React.FC<MatchesProps> = ({
       setScorecardError(null);
       const calculatedWinnerId = activeLiveScore.calculatedResult?.winningTeamId ?? (outcomeWinningTeamId > 0 ? outcomeWinningTeamId : undefined);
       const calculatedResultText = activeLiveScore.calculatedResult?.resultDescription || outcomeResultText;
+      const targetMomPlayerId = outcomeMomPlayerId > 0 ? outcomeMomPlayerId : activeLiveScore.momDetails?.selectedPlayerId;
       const updated = await liveScoringApi.completeMatch(activeLiveScore.match.id, {
         winningTeamId: calculatedWinnerId && calculatedWinnerId > 0 ? calculatedWinnerId : undefined,
         result: calculatedResultText,
+        momPlayerId: targetMomPlayerId ? Number(targetMomPlayerId) : undefined,
       });
       setActiveLiveScore(updated);
       fetchMatches();
@@ -2250,8 +2304,8 @@ export const Matches: React.FC<MatchesProps> = ({
 
                       const outcomeBadge = getInningsOutcomeBadge(currentInnings, activeLiveScore);
                       const momName =
-                        activeLiveScore.match.momPlayerName ||
-                        activeLiveScore.momDetails?.selectedPlayerName;
+                        activeLiveScore.momDetails?.selectedPlayerName ||
+                        activeLiveScore.match.momPlayerName;
 
                       return (
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.65rem' }}>
@@ -2527,150 +2581,183 @@ export const Matches: React.FC<MatchesProps> = ({
 
                     {/* Crease Widget: Striker, Non-Striker, Bowler */}
                     <div className="crease-grid">
-                      {/* Striker Card */}
-                      <div
-                        className={`crease-card active-striker ${!currentInnings?.striker && canScoreLive && isScoringAllowed ? 'crease-card-vacant' : ''}`}
-                        onClick={() => {
-                          if (canScoreLive && isScoringAllowed && !currentInnings?.striker) {
-                            setNewBatsmanId(0);
-                            setNewBatsmanModalOpen(true);
-                          }
-                        }}
-                        style={!currentInnings?.striker && canScoreLive && isScoringAllowed ? { cursor: 'pointer', border: '1px dashed #10b981' } : undefined}
-                      >
-                        <div className="crease-card-header">
-                          <span style={{ color: '#10b981', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                            🏏 Striker
-                          </span>
-                        </div>
-                        <div className="crease-player-name">
-                          {currentInnings?.striker?.playerName || (
-                            <span style={{ color: '#10b981', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                              <UserPlus size={14} /> Select Striker
-                            </span>
-                          )}
-                        </div>
-                        <div className="crease-stats-line">
-                          <span className="crease-runs-large">{currentInnings?.striker?.runs ?? 0}</span>
-                          <span className="crease-balls-small">({currentInnings?.striker?.ballsFaced ?? 0} balls)</span>
-                        </div>
-                        <div className="crease-meta-badges">
-                          <span>4s: <strong>{currentInnings?.striker?.fours ?? 0}</strong></span>
-                          <span>6s: <strong>{currentInnings?.striker?.sixes ?? 0}</strong></span>
-                          <span>SR: <strong>{currentInnings?.striker?.strikeRate ?? 0}</strong></span>
-                        </div>
-                        {canScoreLive && isScoringAllowed && !currentInnings?.striker && (
-                          <button
-                            className="btn btn-sm btn-primary"
-                            style={{ marginTop: '0.6rem', width: '100%', fontSize: '0.75rem', padding: '0.3rem 0.5rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}
-                            onClick={(e) => {
-                              e.stopPropagation();
+                      {/* Both Batsmen side by side across mobile, tablet & desktop */}
+                      <div className="crease-batsmen-row">
+                        {/* Striker Card */}
+                        <div
+                          className={`crease-card active-striker ${!currentInnings?.striker && canScoreLive && isScoringAllowed ? 'crease-card-vacant' : ''}`}
+                          onClick={() => {
+                            if (canScoreLive && isScoringAllowed && !currentInnings?.striker) {
                               setNewBatsmanId(0);
                               setNewBatsmanModalOpen(true);
-                            }}
-                            disabled={actionLoading}
-                          >
-                            <UserPlus size={13} /> Select Striker
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Manual Strike Swap Button */}
-                      {canScoreLive && isScoringAllowed && (
-                        <button
-                          className="strike-swap-btn"
-                          title="Swap Striker & Non-Striker strike end"
-                          onClick={async () => {
-                            if (!currentInnings || !currentInnings.striker || !currentInnings.nonStriker) return;
-                            // Strike rotation visually swaps striker/non-striker on odd runs; button provides quick manual swap
+                            }
                           }}
+                          style={!currentInnings?.striker && canScoreLive && isScoringAllowed ? { cursor: 'pointer', border: '1px dashed #10b981' } : undefined}
                         >
-                          <ArrowLeftRight size={16} />
-                        </button>
-                      )}
-
-                      {/* Non-Striker Card */}
-                      <div
-                        className={`crease-card ${!currentInnings?.nonStriker && canScoreLive && isScoringAllowed ? 'crease-card-vacant' : ''}`}
-                        onClick={() => {
-                          if (canScoreLive && isScoringAllowed && !currentInnings?.nonStriker) {
-                            setNewBatsmanId(0);
-                            setNewBatsmanModalOpen(true);
-                          }
-                        }}
-                        style={!currentInnings?.nonStriker && canScoreLive && isScoringAllowed ? { cursor: 'pointer', border: '1px dashed #f59e0b' } : undefined}
-                      >
-                        <div className="crease-card-header">
-                          <span>Non-Striker</span>
-                        </div>
-                        <div className="crease-player-name">
-                          {currentInnings?.nonStriker?.playerName || (
-                            <span style={{ color: '#f59e0b', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                              <UserPlus size={14} /> Select Non-Striker
+                          <div className="crease-card-header">
+                            <span style={{ color: '#10b981', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                              🏏 Striker
                             </span>
+                            {canScoreLive && isScoringAllowed && currentInnings?.striker && (
+                              <button
+                                className="btn-declare-pill"
+                                type="button"
+                                title="Declare / Retire Striker"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeclareBatsmanTarget('striker');
+                                  setDeclareIncomingBatsmanId(0);
+                                  setDeclareModalOpen(true);
+                                }}
+                              >
+                                Declare
+                              </button>
+                            )}
+                          </div>
+                          <div className="crease-player-name">
+                            {currentInnings?.striker?.playerName || (
+                              <span style={{ color: '#10b981', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                <UserPlus size={14} /> Select Striker
+                              </span>
+                            )}
+                          </div>
+                          <div className="crease-stats-line">
+                            <span className="crease-runs-large">{currentInnings?.striker?.runs ?? 0}</span>
+                            <span className="crease-balls-small">({currentInnings?.striker?.ballsFaced ?? 0} balls)</span>
+                          </div>
+                          <div className="crease-meta-badges">
+                            <span>4s: <strong>{currentInnings?.striker?.fours ?? 0}</strong></span>
+                            <span>6s: <strong>{currentInnings?.striker?.sixes ?? 0}</strong></span>
+                            <span>SR: <strong>{currentInnings?.striker?.strikeRate ?? 0}</strong></span>
+                          </div>
+                          {canScoreLive && isScoringAllowed && !currentInnings?.striker && (
+                            <button
+                              className="btn btn-sm btn-primary"
+                              style={{ marginTop: '0.6rem', width: '100%', fontSize: '0.75rem', padding: '0.3rem 0.5rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setNewBatsmanId(0);
+                                setNewBatsmanModalOpen(true);
+                              }}
+                              disabled={actionLoading}
+                            >
+                              <UserPlus size={13} /> Select Striker
+                            </button>
                           )}
                         </div>
-                        <div className="crease-stats-line">
-                          <span className="crease-runs-large">{currentInnings?.nonStriker?.runs ?? 0}</span>
-                          <span className="crease-balls-small">({currentInnings?.nonStriker?.ballsFaced ?? 0} balls)</span>
-                        </div>
-                        <div className="crease-meta-badges">
-                          <span>4s: <strong>{currentInnings?.nonStriker?.fours ?? 0}</strong></span>
-                          <span>6s: <strong>{currentInnings?.nonStriker?.sixes ?? 0}</strong></span>
-                          <span>SR: <strong>{currentInnings?.nonStriker?.strikeRate ?? 0}</strong></span>
-                        </div>
-                        {canScoreLive && isScoringAllowed && !currentInnings?.nonStriker && (
+
+                        {/* Manual Strike Swap Button */}
+                        {canScoreLive && isScoringAllowed && (
                           <button
-                            className="btn btn-sm btn-primary"
-                            style={{ marginTop: '0.6rem', width: '100%', fontSize: '0.75rem', padding: '0.3rem 0.5rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setNewBatsmanId(0);
-                              setNewBatsmanModalOpen(true);
-                            }}
-                            disabled={actionLoading}
+                            className="strike-swap-btn"
+                            title="Swap Striker & Non-Striker strike end"
+                            onClick={handleSwapStrike}
+                            disabled={actionLoading || !currentInnings?.striker || !currentInnings?.nonStriker}
                           >
-                            <UserPlus size={13} /> Select Non-Striker
+                            <ArrowLeftRight size={15} />
                           </button>
                         )}
+
+                        {/* Non-Striker Card */}
+                        <div
+                          className={`crease-card ${!currentInnings?.nonStriker && canScoreLive && isScoringAllowed ? 'crease-card-vacant' : ''}`}
+                          onClick={() => {
+                            if (canScoreLive && isScoringAllowed && !currentInnings?.nonStriker) {
+                              setNewBatsmanId(0);
+                              setNewBatsmanModalOpen(true);
+                            }
+                          }}
+                          style={!currentInnings?.nonStriker && canScoreLive && isScoringAllowed ? { cursor: 'pointer', border: '1px dashed #f59e0b' } : undefined}
+                        >
+                          <div className="crease-card-header">
+                            <span>Non-Striker</span>
+                            {canScoreLive && isScoringAllowed && currentInnings?.nonStriker && (
+                              <button
+                                className="btn-declare-pill"
+                                type="button"
+                                title="Declare / Retire Non-Striker"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeclareBatsmanTarget('nonStriker');
+                                  setDeclareIncomingBatsmanId(0);
+                                  setDeclareModalOpen(true);
+                                }}
+                              >
+                                Declare
+                              </button>
+                            )}
+                          </div>
+                          <div className="crease-player-name">
+                            {currentInnings?.nonStriker?.playerName || (
+                              <span style={{ color: '#f59e0b', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                <UserPlus size={14} /> Select Non-Striker
+                              </span>
+                            )}
+                          </div>
+                          <div className="crease-stats-line">
+                            <span className="crease-runs-large">{currentInnings?.nonStriker?.runs ?? 0}</span>
+                            <span className="crease-balls-small">({currentInnings?.nonStriker?.ballsFaced ?? 0} balls)</span>
+                          </div>
+                          <div className="crease-meta-badges">
+                            <span>4s: <strong>{currentInnings?.nonStriker?.fours ?? 0}</strong></span>
+                            <span>6s: <strong>{currentInnings?.nonStriker?.sixes ?? 0}</strong></span>
+                            <span>SR: <strong>{currentInnings?.nonStriker?.strikeRate ?? 0}</strong></span>
+                          </div>
+                          {canScoreLive && isScoringAllowed && !currentInnings?.nonStriker && (
+                            <button
+                              className="btn btn-sm btn-primary"
+                              style={{ marginTop: '0.6rem', width: '100%', fontSize: '0.75rem', padding: '0.3rem 0.5rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setNewBatsmanId(0);
+                                setNewBatsmanModalOpen(true);
+                              }}
+                              disabled={actionLoading}
+                            >
+                              <UserPlus size={13} /> Select Non-Striker
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       {/* Bowler Card */}
-                      <div className="crease-card">
-                        <div className="crease-card-header">
-                          <span style={{ color: '#3b82f6' }}>Bowler</span>
-                        </div>
-                        <div className="crease-player-name">
-                          {currentInnings?.currentBowler?.playerName || 'Select Bowler'}
-                        </div>
-                        <div className="crease-stats-line">
-                          <span className="crease-runs-large" style={{ color: '#3b82f6' }}>
-                            {currentInnings?.currentBowler?.wickets ?? 0} - {currentInnings?.currentBowler?.runsConceded ?? 0}
-                          </span>
-                          <span className="crease-balls-small">({currentInnings?.currentBowler?.oversDisplay ?? '0.0'} ov)</span>
-                        </div>
-                        <div className="crease-meta-badges">
-                          <span>M: <strong>{currentInnings?.currentBowler?.maidenOvers ?? 0}</strong></span>
-                          <span>Econ: <strong>{currentInnings?.currentBowler?.economyRate ?? 0}</strong></span>
-                          <span>Wd: <strong>{currentInnings?.currentBowler?.wides ?? 0}</strong></span>
-                          <span>Nb: <strong>{currentInnings?.currentBowler?.noBalls ?? 0}</strong></span>
-                          {(currentInnings?.currentBowler?.hatTricks ?? 0) > 0 && (
-                            <span style={{ color: '#ec4899', fontWeight: 600 }}>
-                              🎩 HT: <strong>{currentInnings?.currentBowler?.hatTricks}</strong>
+                      <div className="crease-bowler-wrapper">
+                        <div className="crease-card">
+                          <div className="crease-card-header">
+                            <span style={{ color: '#3b82f6' }}>Bowler</span>
+                          </div>
+                          <div className="crease-player-name">
+                            {currentInnings?.currentBowler?.playerName || 'Select Bowler'}
+                          </div>
+                          <div className="crease-stats-line">
+                            <span className="crease-runs-large" style={{ color: '#3b82f6' }}>
+                              {currentInnings?.currentBowler?.wickets ?? 0} - {currentInnings?.currentBowler?.runsConceded ?? 0}
                             </span>
+                            <span className="crease-balls-small">({currentInnings?.currentBowler?.oversDisplay ?? '0.0'} ov)</span>
+                          </div>
+                          <div className="crease-meta-badges">
+                            <span>M: <strong>{currentInnings?.currentBowler?.maidenOvers ?? 0}</strong></span>
+                            <span>Econ: <strong>{currentInnings?.currentBowler?.economyRate ?? 0}</strong></span>
+                            <span>Wd: <strong>{currentInnings?.currentBowler?.wides ?? 0}</strong></span>
+                            <span>Nb: <strong>{currentInnings?.currentBowler?.noBalls ?? 0}</strong></span>
+                            {(currentInnings?.currentBowler?.hatTricks ?? 0) > 0 && (
+                              <span style={{ color: '#ec4899', fontWeight: 600 }}>
+                                🎩 HT: <strong>{currentInnings?.currentBowler?.hatTricks}</strong>
+                              </span>
+                            )}
+                          </div>
+                          {canScoreLive && isScoringAllowed && currentInnings?.canChangeBowlerPreOver && (
+                            <button
+                              className="btn btn-sm btn-secondary"
+                              style={{ marginTop: '0.6rem', width: '100%', fontSize: '0.75rem', padding: '0.3rem 0.5rem' }}
+                              onClick={() => handleOpenChangeBowler(false)}
+                              disabled={actionLoading}
+                              title="Change bowler before delivering any ball in this over"
+                            >
+                              <RotateCw size={12} style={{ marginRight: '4px' }} /> Change Bowler
+                            </button>
                           )}
                         </div>
-                        {canScoreLive && isScoringAllowed && currentInnings?.canChangeBowlerPreOver && (
-                          <button
-                            className="btn btn-sm btn-secondary"
-                            style={{ marginTop: '0.6rem', width: '100%', fontSize: '0.75rem', padding: '0.3rem 0.5rem' }}
-                            onClick={() => handleOpenChangeBowler(false)}
-                            disabled={actionLoading}
-                            title="Change bowler before delivering any ball in this over"
-                          >
-                            <RotateCw size={12} style={{ marginRight: '4px' }} /> Change Bowler
-                          </button>
-                        )}
                       </div>
                     </div>
 
@@ -3021,14 +3108,14 @@ export const Matches: React.FC<MatchesProps> = ({
                                 Leg Bye (Legal delivery, runs go to team extras):
                               </div>
                               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                {[1, 2, 3, 4].map((lbRun) => (
+                                {[0, 1, 2, 3, 4].map((lbRun) => (
                                   <button
                                     key={lbRun}
                                     className="btn btn-sm btn-secondary"
                                     onClick={() => handleRecordLegBye(lbRun)}
                                     disabled={actionLoading}
                                   >
-                                    {lbRun} Leg Bye{lbRun > 1 ? 's' : ''}
+                                    {lbRun} Leg Bye{lbRun !== 1 ? 's' : ''}
                                   </button>
                                 ))}
                                 <button
@@ -3043,7 +3130,19 @@ export const Matches: React.FC<MatchesProps> = ({
                         </div>
 
                         {/* End Innings Link */}
-                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <button
+                            className="btn btn-sm btn-secondary"
+                            onClick={() => {
+                              setDeclareBatsmanTarget(currentInnings?.striker ? 'striker' : 'nonStriker');
+                              setDeclareIncomingBatsmanId(0);
+                              setDeclareModalOpen(true);
+                            }}
+                            disabled={actionLoading || (!currentInnings?.striker && !currentInnings?.nonStriker)}
+                            title="Declare one of the active batsmen and select an incoming batsman"
+                          >
+                            Declare Batsman
+                          </button>
                           <button
                             className="btn btn-sm btn-secondary"
                             onClick={handleCompleteInnings}
@@ -3636,6 +3735,198 @@ export const Matches: React.FC<MatchesProps> = ({
               </div>
             );
           })()}
+        </div>
+      </Modal>
+
+      {/* Declare Batsman & Select Incoming Batsman Modal */}
+      <Modal
+        isOpen={declareModalOpen}
+        onClose={() => setDeclareModalOpen(false)}
+        title="Declare Batsman & Select Incoming Batsman"
+        size="md"
+        footer={
+          <div style={{ display: 'flex', gap: '0.5rem', width: '100%' }}>
+            <button
+              className="btn btn-secondary"
+              style={{ flex: 1 }}
+              onClick={() => setDeclareModalOpen(false)}
+              disabled={actionLoading}
+            >
+              Cancel
+            </button>
+            <button
+              className="btn btn-danger"
+              style={{ flex: 1 }}
+              onClick={handleDeclareBatsman}
+              disabled={
+                actionLoading ||
+                (!currentInnings?.striker && !currentInnings?.nonStriker) ||
+                (battingPlayers.filter((p) => {
+                  const targetDeclaredPlayerId =
+                    declareBatsmanTarget === 'striker'
+                      ? currentInnings?.striker?.playerId
+                      : currentInnings?.nonStriker?.playerId;
+                  if (targetDeclaredPlayerId != null && String(p.id) === String(targetDeclaredPlayerId)) return false;
+                  const isAtCrease = Boolean(
+                    (currentInnings?.striker?.playerId != null && String(currentInnings.striker.playerId) === String(p.id)) ||
+                    (currentInnings?.nonStriker?.playerId != null && String(currentInnings.nonStriker.playerId) === String(p.id))
+                  );
+                  if (isAtCrease) return false;
+                  const isOutInBattingPerformances = currentInnings?.battingPerformances?.some(
+                    (bp) => String(bp.playerId) === String(p.id) && (bp.isOut || (bp.dismissalType && bp.dismissalType !== 'NotOut'))
+                  );
+                  if (isOutInBattingPerformances) return false;
+                  const isDismissedInDeliveries = currentInnings?.allDeliveries?.some(
+                    (d) => d.isWicket && String(d.dismissedPlayerId) === String(p.id)
+                  );
+                  if (isDismissedInDeliveries) return false;
+                  if (currentInnings?.lastDismissedPlayerId != null && String(p.id) === String(currentInnings.lastDismissedPlayerId)) {
+                    return false;
+                  }
+                  return true;
+                }).length > 0 && declareIncomingBatsmanId === 0)
+              }
+            >
+              Confirm Declaration
+            </button>
+          </div>
+        }
+      >
+        <div style={{ padding: '0.5rem 0' }}>
+          {/* Target Batsman Selection */}
+          <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+            <label className="form-label" style={{ fontWeight: 700, marginBottom: '0.5rem' }}>
+              Select Batsman to Declare:
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+              <div
+                onClick={() => {
+                  if (currentInnings?.striker) {
+                    setDeclareBatsmanTarget('striker');
+                    setDeclareIncomingBatsmanId(0);
+                  }
+                }}
+                style={{
+                  padding: '0.75rem',
+                  borderRadius: '8px',
+                  border: `2px solid ${declareBatsmanTarget === 'striker' ? '#ef4444' : 'var(--border-color)'}`,
+                  background: declareBatsmanTarget === 'striker' ? 'rgba(239, 68, 68, 0.08)' : 'rgba(255,255,255,0.02)',
+                  cursor: currentInnings?.striker ? 'pointer' : 'not-allowed',
+                  opacity: currentInnings?.striker ? 1 : 0.5,
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                <div style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 700, textTransform: 'uppercase' }}>
+                  🏏 Striker
+                </div>
+                <div style={{ fontWeight: 700, fontSize: '0.95rem', marginTop: '0.2rem' }}>
+                  {currentInnings?.striker?.playerName || 'None'}
+                </div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                  {currentInnings?.striker ? `${currentInnings.striker.runs} runs (${currentInnings.striker.ballsFaced} balls)` : 'Vacant'}
+                </div>
+              </div>
+
+              <div
+                onClick={() => {
+                  if (currentInnings?.nonStriker) {
+                    setDeclareBatsmanTarget('nonStriker');
+                    setDeclareIncomingBatsmanId(0);
+                  }
+                }}
+                style={{
+                  padding: '0.75rem',
+                  borderRadius: '8px',
+                  border: `2px solid ${declareBatsmanTarget === 'nonStriker' ? '#ef4444' : 'var(--border-color)'}`,
+                  background: declareBatsmanTarget === 'nonStriker' ? 'rgba(239, 68, 68, 0.08)' : 'rgba(255,255,255,0.02)',
+                  cursor: currentInnings?.nonStriker ? 'pointer' : 'not-allowed',
+                  opacity: currentInnings?.nonStriker ? 1 : 0.5,
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                <div style={{ fontSize: '0.75rem', color: '#f59e0b', fontWeight: 700, textTransform: 'uppercase' }}>
+                  Non-Striker
+                </div>
+                <div style={{ fontWeight: 700, fontSize: '0.95rem', marginTop: '0.2rem' }}>
+                  {currentInnings?.nonStriker?.playerName || 'None'}
+                </div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
+                  {currentInnings?.nonStriker ? `${currentInnings.nonStriker.runs} runs (${currentInnings.nonStriker.ballsFaced} balls)` : 'Vacant'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Incoming Batsman Selection */}
+          <div className="form-group">
+            <label className="form-label" style={{ fontWeight: 700, marginBottom: '0.4rem' }}>
+              Select Incoming Batsman:
+            </label>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.6rem' }}>
+              Choose a replacement batsman. Batsmen who are currently batting, already declared, or already out cannot be selected.
+            </div>
+
+            {(() => {
+              const targetDeclaredPlayerId =
+                declareBatsmanTarget === 'striker'
+                  ? currentInnings?.striker?.playerId
+                  : currentInnings?.nonStriker?.playerId;
+
+              const availableIncoming = battingPlayers.filter((p) => {
+                // 1. Do not select the batsman who is being declared
+                if (targetDeclaredPlayerId != null && String(p.id) === String(targetDeclaredPlayerId)) return false;
+
+                // 2. Do not select batsman in playing (at the crease)
+                const isAtCrease = Boolean(
+                  (currentInnings?.striker?.playerId != null && String(currentInnings.striker.playerId) === String(p.id)) ||
+                  (currentInnings?.nonStriker?.playerId != null && String(currentInnings.nonStriker.playerId) === String(p.id))
+                );
+                if (isAtCrease) return false;
+
+                // 3. Do not select batsman already out or declared in batting performances
+                const isOutInBattingPerformances = currentInnings?.battingPerformances?.some(
+                  (bp) => String(bp.playerId) === String(p.id) && (bp.isOut || (bp.dismissalType && bp.dismissalType !== 'NotOut'))
+                );
+                if (isOutInBattingPerformances) return false;
+
+                // 4. Do not select batsman who declared or was dismissed in ball deliveries
+                const isDismissedInDeliveries = currentInnings?.allDeliveries?.some(
+                  (d) => d.isWicket && String(d.dismissedPlayerId) === String(p.id)
+                );
+                if (isDismissedInDeliveries) return false;
+
+                // 5. Do not select last dismissed player
+                if (currentInnings?.lastDismissedPlayerId != null && String(p.id) === String(currentInnings.lastDismissedPlayerId)) {
+                  return false;
+                }
+
+                return true;
+              });
+
+              if (availableIncoming.length === 0) {
+                return (
+                  <div className="alert alert-warning" style={{ fontSize: '0.85rem', padding: '0.75rem' }}>
+                    No more eligible batsmen available on the batting team roster. The team is all out. Batsman will be declared and the innings will conclude.
+                  </div>
+                );
+              }
+
+              return (
+                <select
+                  className="form-select"
+                  value={declareIncomingBatsmanId}
+                  onChange={(e) => setDeclareIncomingBatsmanId(Number(e.target.value))}
+                >
+                  <option value={0}>-- Select Incoming Batsman --</option>
+                  {availableIncoming.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.fullName || `${p.firstName} ${p.lastName}`} ({p.playerCategory})
+                    </option>
+                  ))}
+                </select>
+              );
+            })()}
+          </div>
         </div>
       </Modal>
 
